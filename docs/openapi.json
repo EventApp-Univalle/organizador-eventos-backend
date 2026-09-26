@@ -1,0 +1,633 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "EventApp API - Sprint 1",
+    "version": "1.0.0",
+    "description": "API REST del flujo persistido de creación y consulta de eventos y subtareas logísticas para el usuario demo de Sprint 1."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Entorno local"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Estado",
+      "description": "Estado del backend"
+    },
+    {
+      "name": "Eventos",
+      "description": "Creación y consulta de eventos"
+    },
+    {
+      "name": "Subtareas",
+      "description": "Creación y consulta del plan de subtareas de un evento"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Estado"],
+        "summary": "Consultar el estado del backend",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "El backend está funcionando.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "estado": "ok",
+                  "mensaje": "Backend funcionando"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/eventos": {
+      "post": {
+        "tags": ["Eventos"],
+        "summary": "Crear un evento",
+        "description": "Crea un evento asociado al usuario demo.",
+        "operationId": "createEvent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventInput"
+              },
+              "example": {
+                "title": "Encuentro cultural",
+                "type": "Cultural",
+                "date": "2026-10-15",
+                "time": "18:30",
+                "location": "Auditorio",
+                "description": "Prueba Sprint 1",
+                "isPriority": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Evento creado y persistido.",
+            "headers": {
+              "Location": {
+                "description": "Ruta del evento creado.",
+                "schema": {
+                  "type": "string",
+                  "example": "/api/eventos/8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                },
+                "example": {
+                  "id": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                  "title": "Encuentro cultural",
+                  "type": "Cultural",
+                  "date": "2026-10-15",
+                  "time": "18:30",
+                  "location": "Auditorio",
+                  "description": "Prueba Sprint 1",
+                  "isPriority": true,
+                  "createdAt": "2026-09-26T15:20:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/eventos/{id}": {
+      "get": {
+        "tags": ["Eventos"],
+        "summary": "Consultar un evento",
+        "description": "Obtiene un evento del usuario demo por su UUID.",
+        "operationId": "getEventById",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evento encontrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                },
+                "example": {
+                  "id": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                  "title": "Encuentro cultural",
+                  "type": "Cultural",
+                  "date": "2026-10-15",
+                  "time": "18:30",
+                  "location": "Auditorio",
+                  "description": "Prueba Sprint 1",
+                  "isPriority": true,
+                  "createdAt": "2026-09-26T15:20:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidEventId"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/eventos/{id}/subtareas": {
+      "post": {
+        "tags": ["Subtareas"],
+        "summary": "Crear una subtarea",
+        "description": "Crea una subtarea para un evento existente del usuario demo. El identificador del evento se toma de la URL.",
+        "operationId": "createSubtask",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubtaskInput"
+              },
+              "example": {
+                "title": "Confirmar sonido",
+                "targetDate": "2026-10-10",
+                "estimatedHours": 1.5
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Subtarea creada y persistida.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Subtask"
+                },
+                "example": {
+                  "id": "c3c05d7d-b962-485e-9bfd-63a26ac068f0",
+                  "eventId": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                  "title": "Confirmar sonido",
+                  "targetDate": "2026-10-10",
+                  "estimatedHours": 1.5,
+                  "createdAt": "2026-09-26T15:25:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID o cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "validationError": {
+                    "summary": "Horas estimadas inválidas",
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Hay errores en los datos enviados.",
+                        "fields": {
+                          "estimatedHours": "Debe ser un número mayor que 0."
+                        }
+                      }
+                    }
+                  },
+                  "invalidEventId": {
+                    "summary": "UUID de evento inválido",
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "El identificador del evento no es válido.",
+                        "fields": {
+                          "id": "Debe ser un UUID válido."
+                        }
+                      }
+                    }
+                  },
+                  "invalidJson": {
+                    "summary": "JSON mal formado",
+                    "value": {
+                      "error": {
+                        "code": "INVALID_JSON",
+                        "message": "El cuerpo debe ser JSON válido."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "get": {
+        "tags": ["Subtareas"],
+        "summary": "Listar las subtareas de un evento",
+        "description": "Devuelve las subtareas del evento del usuario demo, ordenadas por createdAt ascendente y luego por id ascendente. Devuelve un arreglo vacío cuando el evento no tiene subtareas.",
+        "operationId": "listEventSubtasks",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Listado de subtareas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Subtask"
+                  }
+                },
+                "examples": {
+                  "withSubtasks": {
+                    "summary": "Evento con subtareas",
+                    "value": [
+                      {
+                        "id": "c3c05d7d-b962-485e-9bfd-63a26ac068f0",
+                        "eventId": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                        "title": "Confirmar sonido",
+                        "targetDate": "2026-10-10",
+                        "estimatedHours": 1.5,
+                        "createdAt": "2026-09-26T15:25:00.000Z"
+                      }
+                    ]
+                  },
+                  "empty": {
+                    "summary": "Evento sin subtareas",
+                    "value": []
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidEventId"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "EventId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "UUID del evento.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "example": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["estado", "mensaje"],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "example": "ok"
+          },
+          "mensaje": {
+            "type": "string",
+            "example": "Backend funcionando"
+          }
+        }
+      },
+      "EventInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "type", "date"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nombre del evento.",
+            "example": "Encuentro cultural"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tipo de evento.",
+            "example": "Cultural"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha del evento en formato YYYY-MM-DD.",
+            "example": "2026-10-15"
+          },
+          "time": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Hora opcional en formato HH:mm.",
+            "example": "18:30"
+          },
+          "location": {
+            "type": "string",
+            "nullable": true,
+            "description": "Ubicación opcional.",
+            "example": "Auditorio"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Descripción opcional.",
+            "example": "Prueba Sprint 1"
+          },
+          "isPriority": {
+            "type": "boolean",
+            "default": false,
+            "description": "Indica si el evento es prioritario.",
+            "example": true
+          }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "type",
+          "date",
+          "time",
+          "location",
+          "description",
+          "isPriority",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "time": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPriority": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SubtaskInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "targetDate", "estimatedHours"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Título de la subtarea.",
+            "example": "Confirmar sonido"
+          },
+          "targetDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha objetivo en formato YYYY-MM-DD.",
+            "example": "2026-10-10"
+          },
+          "estimatedHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "description": "Horas estimadas; debe ser un número JSON finito mayor que 0.",
+            "example": 1.5
+          }
+        }
+      },
+      "Subtask": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "eventId",
+          "title",
+          "targetDate",
+          "estimatedHours",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "targetDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "estimatedHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "VALIDATION_ERROR"
+              },
+              "message": {
+                "type": "string",
+                "example": "Hay errores en los datos enviados."
+              },
+              "fields": {
+                "type": "object",
+                "description": "Errores por campo; solo se incluye cuando aplica.",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "example": {
+                  "title": "El título es obligatorio."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "El cuerpo de la petición es inválido.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "validationError": {
+                "summary": "Campos obligatorios inválidos",
+                "value": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Hay errores en los datos enviados.",
+                    "fields": {
+                      "title": "El nombre del evento es obligatorio.",
+                      "type": "El tipo de evento es obligatorio.",
+                      "date": "La fecha debe tener formato YYYY-MM-DD y ser válida."
+                    }
+                  }
+                }
+              },
+              "invalidJson": {
+                "summary": "JSON mal formado",
+                "value": {
+                  "error": {
+                    "code": "INVALID_JSON",
+                    "message": "El cuerpo debe ser JSON válido."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "InvalidEventId": {
+        "description": "El UUID del evento es inválido.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "El identificador del evento no es válido.",
+                "fields": {
+                  "id": "Debe ser un UUID válido."
+                }
+              }
+            }
+          }
+        }
+      },
+      "EventNotFound": {
+        "description": "No existe un evento del usuario demo con el UUID indicado.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "EVENT_NOT_FOUND",
+                "message": "Evento no encontrado."
+              }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Error interno sin detalles sensibles.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "No fue posible completar la operación."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

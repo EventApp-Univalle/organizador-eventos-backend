@@ -1,11 +1,6 @@
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
+const app = require('./src/app');
+const config = require('./src/config');
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ estado: 'ok', mensaje: 'Backend funcionando' });
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
+app.listen(config.port, () => {
+  console.log(`Servidor ejecutándose en puerto ${config.port}`);
 });

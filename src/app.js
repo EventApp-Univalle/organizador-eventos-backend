@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
 const config = require('./config');
 const eventosRouter = require('./eventos.routes');
+const openapiDocument = require('../docs/openapi.json');
 
 const app = express();
 
@@ -19,6 +21,14 @@ app.get('/health', (req, res) => {
     mensaje: 'Backend funcionando',
   });
 });
+
+app.use(
+  '/api-docs',
+  swaggerUi.serve,
+  swaggerUi.setup(openapiDocument, {
+    customSiteTitle: 'EventApp API - Sprint 1',
+  })
+);
 
 app.use('/api/eventos', eventosRouter);
 

@@ -49,6 +49,32 @@
         }
       }
     },
+    "/api/tareas/hoy": {
+      "get": {
+        "tags": ["Tareas"],
+        "summary": "Consultar tareas priorizadas del usuario demo",
+        "description": "Devuelve las subtareas asociadas a eventos del usuario demo, ordenadas por fecha objetivo y duración estimada.",
+        "operationId": "getTodayTasks",
+        "responses": {
+          "200": {
+            "description": "Tareas consultadas correctamente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TodayTask"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/eventos": {
       "post": {
         "tags": ["Eventos"],
@@ -328,6 +354,19 @@
       }
     },
     "schemas": {
+      "TodayTask": {
+        "type": "object",
+        "required": ["id", "eventId", "title", "date", "estimatedHours", "eventTitle", "priority"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "eventId": { "type": "string", "format": "uuid" },
+          "title": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "estimatedHours": { "type": "number", "exclusiveMinimum": 0 },
+          "eventTitle": { "type": "string" },
+          "priority": { "type": "string", "enum": ["Alta", "Media"] }
+        }
+      },
       "HealthResponse": {
         "type": "object",
         "additionalProperties": false,

@@ -28,7 +28,7 @@ after(async () => {
   }
 });
 
-test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1', () => {
+test('openapi.json es JSON válido y documenta las rutas actuales', () => {
   const openapiPath = path.join(__dirname, '..', 'docs', 'openapi.json');
   const openapi = JSON.parse(fs.readFileSync(openapiPath, 'utf8'));
 
@@ -37,6 +37,7 @@ test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1', () =
     '/api/eventos',
     '/api/eventos/{id}',
     '/api/eventos/{id}/subtareas',
+    '/api/tareas/hoy',
     '/health',
   ]);
   assert.ok(openapi.paths['/health'].get);
@@ -44,6 +45,7 @@ test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1', () =
   assert.ok(openapi.paths['/api/eventos/{id}'].get);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].post);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].get);
+  assert.ok(openapi.paths['/api/tareas/hoy'].get);
 });
 
 test('Swagger UI responde en /api-docs', async () => {

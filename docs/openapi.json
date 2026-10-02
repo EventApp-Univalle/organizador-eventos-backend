@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "EventApp API - Sprint 1",
-    "version": "1.0.0",
-    "description": "API REST del flujo persistido de creación y consulta de eventos y subtareas logísticas para el usuario demo de Sprint 1."
+    "title": "EventApp API - Sprint 2",
+    "version": "2.0.0",
+    "description": "API REST de eventos, subtareas y vista Hoy de Sprint 2. Las rutas privadas usan el usuario autenticado por Supabase Auth y aíslan sus datos."
   },
   "servers": [
     {
@@ -12,6 +12,7 @@
     }
   ],
   "tags": [
+    { "name": "Hoy", "description": "Subtareas agrupadas del organizador autenticado" },
     {
       "name": "Estado",
       "description": "Estado del backend"
@@ -28,6 +29,7 @@
   "paths": {
     "/health": {
       "get": {
+        "security": [],
         "tags": ["Estado"],
         "summary": "Consultar el estado del backend",
         "operationId": "getHealth",
@@ -49,12 +51,133 @@
         }
       }
     },
+    "/api/tareas/hoy": {
+      "get": {
+        "tags": [
+          "Hoy"
+        ],
+        "summary": "Consultar las subtareas del organizador por fecha",
+        "operationId": "getTodayTasks",
+        "description": "Solo devuelve subtareas de eventos del usuario autenticado. referenceDate se calcula una vez por petición en America/Bogota. overdue contiene targetDate anterior a referenceDate; today, igual; upcoming, posterior, sin ventana fija. Cada grupo se ordena por targetDate ASC, estimatedHours ASC e id ASC. Se incluyen todas las tareas, con paginación interna. Solo se admite eventId una vez; parámetros desconocidos se rechazan.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "query",
+            "required": false,
+            "description": "UUID de un evento propio. Eventos ajenos e inexistentes producen el mismo 404.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subtareas agrupadas; los tres arrays siempre existen.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodayResponse"
+                },
+                "examples": {
+                  "grouped": {
+                    "summary": "Clasificación por fecha y desempate por esfuerzo",
+                    "value": {
+                      "referenceDate": "2026-10-02",
+                      "overdue": [
+                        {
+                          "id": "00000000-0000-4000-8000-000000000001",
+                          "title": "Confirmar espacio",
+                          "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                          "eventTitle": "Encuentro cultural",
+                          "targetDate": "2026-10-01",
+                          "estimatedHours": 2
+                        }
+                      ],
+                      "today": [
+                        {
+                          "id": "00000000-0000-4000-8000-000000000002",
+                          "title": "Confirmar sonido",
+                          "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                          "eventTitle": "Encuentro cultural",
+                          "targetDate": "2026-10-02",
+                          "estimatedHours": 1
+                        },
+                        {
+                          "id": "00000000-0000-4000-8000-000000000003",
+                          "title": "Preparar materiales",
+                          "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                          "eventTitle": "Encuentro cultural",
+                          "targetDate": "2026-10-02",
+                          "estimatedHours": 3
+                        }
+                      ],
+                      "upcoming": [
+                        {
+                          "id": "00000000-0000-4000-8000-000000000004",
+                          "title": "Confirmar transporte",
+                          "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                          "eventTitle": "Encuentro cultural",
+                          "targetDate": "2026-10-03",
+                          "estimatedHours": 1.5
+                        }
+                      ]
+                    }
+                  },
+                  "empty": {
+                    "summary": "Sin subtareas",
+                    "value": {
+                      "referenceDate": "2026-10-02",
+                      "overdue": [],
+                      "today": [],
+                      "upcoming": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "eventId inválido o repetido, o parámetros desconocidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Los parámetros de consulta no son válidos."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/eventos": {
       "post": {
         "tags": ["Eventos"],
         "summary": "Crear un evento",
-        "description": "Crea un evento asociado al usuario demo.",
+        "description": "Crea un evento asociado al usuario autenticado.",
         "operationId": "createEvent",
+        "security": [{ "BearerAuth": [] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -108,6 +231,9 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
@@ -118,8 +244,9 @@
       "get": {
         "tags": ["Eventos"],
         "summary": "Consultar un evento",
-        "description": "Obtiene un evento del usuario demo por su UUID.",
+        "description": "Obtiene un evento del usuario autenticado por su UUID.",
         "operationId": "getEventById",
+        "security": [{ "BearerAuth": [] }],
         "parameters": [
           {
             "$ref": "#/components/parameters/EventId"
@@ -153,6 +280,9 @@
           "404": {
             "$ref": "#/components/responses/EventNotFound"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
@@ -163,8 +293,9 @@
       "post": {
         "tags": ["Subtareas"],
         "summary": "Crear una subtarea",
-        "description": "Crea una subtarea para un evento existente del usuario demo. El identificador del evento se toma de la URL.",
+        "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL.",
         "operationId": "createSubtask",
+        "security": [{ "BearerAuth": [] }],
         "parameters": [
           {
             "$ref": "#/components/parameters/EventId"
@@ -217,7 +348,7 @@
                     "value": {
                       "error": {
                         "code": "VALIDATION_ERROR",
-                        "message": "Hay errores en los datos enviados.",
+                        "message": "Revisa los campos indicados.",
                         "fields": {
                           "estimatedHours": "Debe ser un número mayor que 0."
                         }
@@ -252,6 +383,9 @@
           "404": {
             "$ref": "#/components/responses/EventNotFound"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
@@ -260,8 +394,9 @@
       "get": {
         "tags": ["Subtareas"],
         "summary": "Listar las subtareas de un evento",
-        "description": "Devuelve las subtareas del evento del usuario demo, ordenadas por createdAt ascendente y luego por id ascendente. Devuelve un arreglo vacío cuando el evento no tiene subtareas.",
+        "description": "Devuelve las subtareas del evento del usuario autenticado, ordenadas por createdAt ascendente y luego por id ascendente. Devuelve un arreglo vacío cuando el evento no tiene subtareas.",
         "operationId": "listEventSubtasks",
+        "security": [{ "BearerAuth": [] }],
         "parameters": [
           {
             "$ref": "#/components/parameters/EventId"
@@ -306,6 +441,9 @@
           "404": {
             "$ref": "#/components/responses/EventNotFound"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
@@ -314,6 +452,14 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Access token de Supabase Auth obtenido al iniciar sesión. Enviar Authorization: Bearer <access_token>. El backend verifica la identidad; no acepta propietarios suministrados por el cliente."
+      }
+    },
     "parameters": {
       "EventId": {
         "name": "id",
@@ -328,6 +474,82 @@
       }
     },
     "schemas": {
+      "TodayTask": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "eventId",
+          "eventTitle",
+          "targetDate",
+          "estimatedHours"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventTitle": {
+            "type": "string"
+          },
+          "targetDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha calendario YYYY-MM-DD, sin conversión a instante UTC."
+          },
+          "estimatedHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          }
+        }
+      },
+      "TodayResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "referenceDate",
+          "overdue",
+          "today",
+          "upcoming"
+        ],
+        "properties": {
+          "referenceDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha calendario actual en America/Bogota usada para clasificar."
+          },
+          "overdue": {
+            "type": "array",
+            "description": "targetDate anterior a referenceDate.",
+            "items": {
+              "$ref": "#/components/schemas/TodayTask"
+            }
+          },
+          "today": {
+            "type": "array",
+            "description": "targetDate igual a referenceDate.",
+            "items": {
+              "$ref": "#/components/schemas/TodayTask"
+            }
+          },
+          "upcoming": {
+            "type": "array",
+            "description": "targetDate posterior a referenceDate, sin límite de días.",
+            "items": {
+              "$ref": "#/components/schemas/TodayTask"
+            }
+          }
+        }
+      },
       "HealthResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -524,7 +746,7 @@
               },
               "message": {
                 "type": "string",
-                "example": "Hay errores en los datos enviados."
+                "example": "Revisa los campos indicados."
               },
               "fields": {
                 "type": "object",
@@ -533,7 +755,7 @@
                   "type": "string"
                 },
                 "example": {
-                  "title": "El título es obligatorio."
+                  "title": "El nombre del evento es obligatorio."
                 }
               }
             }
@@ -542,6 +764,36 @@
       }
     },
     "responses": {
+      "Unauthorized": {
+        "description": "Falta Authorization o la sesión es inválida/vencida.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "authRequired": {
+                "summary": "Sin Authorization",
+                "value": {
+                  "error": {
+                    "code": "AUTH_REQUIRED",
+                    "message": "Debes iniciar sesión para continuar."
+                  }
+                }
+              },
+              "invalidToken": {
+                "summary": "Bearer malformado o token inválido/vencido",
+                "value": {
+                  "error": {
+                    "code": "INVALID_TOKEN",
+                    "message": "La sesión no es válida o ha vencido. Inicia sesión nuevamente."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "ValidationError": {
         "description": "El cuerpo de la petición es inválido.",
         "content": {
@@ -555,7 +807,7 @@
                 "value": {
                   "error": {
                     "code": "VALIDATION_ERROR",
-                    "message": "Hay errores en los datos enviados.",
+                    "message": "Revisa los campos indicados.",
                     "fields": {
                       "title": "El nombre del evento es obligatorio.",
                       "type": "El tipo de evento es obligatorio.",
@@ -597,7 +849,7 @@
         }
       },
       "EventNotFound": {
-        "description": "No existe un evento del usuario demo con el UUID indicado.",
+        "description": "El evento no existe o pertenece a otro usuario; ambos casos devuelven la misma respuesta.",
         "content": {
           "application/json": {
             "schema": {

@@ -5,11 +5,11 @@ const { once } = require('node:events');
 process.env.DOTENV_CONFIG_QUIET = 'true';
 process.env.SUPABASE_URL ||= 'https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY ||= 'test-secret';
-process.env.DEMO_USER_ID ||= '00000000-0000-4000-8000-000000000001';
 process.env.CORS_ORIGINS ||= 'http://localhost:5173';
 
 const EVENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SUBTASK_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const USER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const scenario = {};
 const calls = {};
@@ -37,6 +37,11 @@ function resetScenario() {
 resetScenario();
 
 const supabaseMock = {
+  auth: {
+    async getUser() {
+      return { data: { user: { id: USER_ID } }, error: null };
+    },
+  },
   from(table) {
     const builder = {
       select() {
@@ -108,7 +113,10 @@ beforeEach(() => {
 });
 
 async function request(path, options = {}) {
-  const response = await fetch(`${baseUrl}${path}`, options);
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: { Authorization: 'Bearer test-user', ...options.headers },
+  });
   const body = await response.json();
   return { response, body };
 }
@@ -151,7 +159,7 @@ test('POST rechaza campos desconocidos antes de consultar el evento', async () =
   assert.equal(calls.filters.length, 0);
 });
 
-test('POST devuelve 404 cuando el evento no pertenece al usuario demo', async () => {
+test('POST devuelve 404 cuando el evento no pertenece al usuario autenticado', async () => {
   scenario.event = null;
 
   const { response, body } = await request(
@@ -175,7 +183,7 @@ test('POST devuelve 404 cuando el evento no pertenece al usuario demo', async ()
     {
       table: 'events',
       column: 'owner_id',
-      value: process.env.DEMO_USER_ID,
+      value: USER_ID,
     },
   ]);
 });

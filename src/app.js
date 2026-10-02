@@ -3,6 +3,7 @@ const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
 const config = require('./config');
 const eventosRouter = require('./eventos.routes');
+const authenticate = require('./auth.middleware');
 const openapiDocument = require('../docs/openapi.json');
 
 const app = express();
@@ -30,7 +31,7 @@ app.use(
   })
 );
 
-app.use('/api/eventos', eventosRouter);
+app.use('/api/eventos', authenticate, eventosRouter);
 
 app.use((error, req, res, next) => {
   if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {

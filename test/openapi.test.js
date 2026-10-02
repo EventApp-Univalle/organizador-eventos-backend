@@ -5,7 +5,6 @@ const path = require('node:path');
 
 process.env.SUPABASE_URL ||= 'https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY ||= 'test-secret-key';
-process.env.DEMO_USER_ID ||= '00000000-0000-4000-8000-000000000001';
 
 const app = require('../src/app');
 

@@ -172,6 +172,76 @@
       }
     },
     "/api/eventos": {
+      "get": {
+        "tags": [
+          "Eventos"
+        ],
+        "summary": "Listar todos los eventos propios",
+        "operationId": "getEvents",
+        "description": "Devuelve todos los eventos del usuario autenticado, incluidos los que no tienen subtareas. Orden date ASC e id ASC; paginación interna para evitar truncamiento. No admite query ni cuerpo JSON; la identidad proviene exclusivamente de Bearer.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos propios; array vacío cuando no existen eventos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                },
+                "examples": {
+                  "events": {
+                    "value": [
+                      {
+                        "id": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                        "title": "Encuentro cultural",
+                        "type": "Cultural",
+                        "date": "2026-10-15",
+                        "time": "18:30",
+                        "location": "Auditorio",
+                        "description": "Prueba Sprint 1",
+                        "isPriority": true,
+                        "createdAt": "2026-09-26T15:20:00.000Z"
+                      }
+                    ]
+                  },
+                  "empty": {
+                    "value": []
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros o cuerpo JSON no admitidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "El listado no admite parámetros ni cuerpo JSON."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
       "post": {
         "tags": ["Eventos"],
         "summary": "Crear un evento",

@@ -7,6 +7,7 @@ const {
 } = require('./validation');
 
 const router = express.Router();
+const PAGE_SIZE = 500;
 
 function mapEvent(row) {
   return {
@@ -96,6 +97,42 @@ async function ensureUserProfile(user) {
     { onConflict: 'id', ignoreDuplicates: true }
   );
 }
+
+router.get('/', async (req, res) => {
+  // Identity only comes from the authenticated session; this listing has no filters/body.
+  if (new URL(req.originalUrl, 'http://localhost').search || req.body !== undefined) {
+    return res.status(400).json({
+      error: { code: 'VALIDATION_ERROR', message: 'El listado no admite parámetros ni cuerpo JSON.' },
+    });
+  }
+
+  try {
+    const events = [];
+    let offset = 0;
+    while (true) {
+      const { data, error, count } = await supabase.from('events')
+        .select('id,owner_id,title,type,date,time,location,description,is_priority,created_at', { count: 'exact' })
+        .eq('owner_id', req.user.id)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw error;
+      if (!Array.isArray(data) || !Number.isInteger(count) || count < 0 ||
+          data.some(row => !row || row.owner_id !== req.user.id)) {
+        throw new Error('Listado de eventos inconsistente.');
+      }
+      events.push(...data.map(mapEvent));
+      offset += data.length;
+      if (offset >= count) break;
+      if (data.length === 0) throw new Error('Listado de eventos incompleto.');
+    }
+    return res.status(200).json(events);
+  } catch {
+    return res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: 'No fue posible completar la operación.' },
+    });
+  }
+});
 
 router.post('/', async (req, res) => {
   const validation = validateEventBody(req.body);

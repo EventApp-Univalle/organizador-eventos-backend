@@ -43,6 +43,7 @@ test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1 y 2', 
   ]);
   assert.ok(openapi.paths['/health'].get);
   assert.ok(openapi.paths['/api/eventos'].post);
+  assert.ok(openapi.paths['/api/eventos'].get);
   assert.ok(openapi.paths['/api/eventos/{id}'].get);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].post);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].get);
@@ -74,6 +75,18 @@ test('OpenAPI define Bearer JWT y protege todas las operaciones privadas', () =>
       }
     }
   }
+});
+
+test('colección de eventos documenta array, vacío y errores', () => {
+  const operation = document.paths['/api/eventos'].get;
+  assert.deepEqual(Object.keys(operation.responses).sort(), ['200', '400', '401', '500']);
+  const content = operation.responses['200'].content['application/json'];
+  assert.equal(content.schema.type, 'array');
+  assert.equal(content.schema.items.$ref, '#/components/schemas/Event');
+  assert.deepEqual(content.examples.empty.value, []);
+  assert.ok(content.examples.events.value.length > 0);
+  assert.equal(operation.requestBody, undefined);
+  assert.equal(operation.parameters, undefined);
 });
 
 test('Hoy documenta únicamente eventId y los cinco estados HTTP aprobados', () => {

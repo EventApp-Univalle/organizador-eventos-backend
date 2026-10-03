@@ -46,6 +46,7 @@ test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1 y 2', 
   assert.ok(openapi.paths['/api/eventos/{id}'].get);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].post);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].get);
+  assert.ok(openapi.paths['/api/tareas/hoy'].get);
 });
 
 test('Swagger UI responde en /api-docs', async () => {

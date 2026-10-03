@@ -185,6 +185,7 @@ router.post('/:id/subtareas', async (req, res) => {
   }
 
   const subtask = validation.value;
+
   const { data, error } = await supabase
     .from('subtasks')
     .insert({

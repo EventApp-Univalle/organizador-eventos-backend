@@ -1,4 +1,4 @@
-const { test, before, after, beforeEach } = require('node:test');
+const { test, before, after, beforeEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 
@@ -11,11 +11,14 @@ const EVENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SUBTASK_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const USER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
+const REFERENCE_DATE = '2026-10-03';
+mock.method(require('../src/tareas.utils'), 'getBogotaDate', () => REFERENCE_DATE);
+
 const scenario = {};
 const calls = {};
 
 function resetScenario() {
-  scenario.event = { id: EVENT_ID };
+  scenario.event = { id: EVENT_ID, date: '2026-10-15' };
   scenario.eventError = null;
   scenario.insertedSubtask = {
     id: SUBTASK_ID,
@@ -301,4 +304,74 @@ test('un error de datos devuelve 500 sin detalles internos', async () => {
     },
   });
   assert.equal(JSON.stringify(body).includes('detalle interno'), false);
+});
+
+async function postSubtask(overrides = {}) {
+  return request(`/api/eventos/${EVENT_ID}/subtareas`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Sonido', targetDate: '2026-10-10', estimatedHours: 1.5, ...overrides }),
+  });
+}
+
+for (const [label, targetDate] of [
+  ['hoy', REFERENCE_DATE],
+  ['fecha del evento', '2026-10-15'],
+  ['fecha intermedia', '2026-10-10'],
+]) {
+  test(`POST acepta ${label} y esfuerzo decimal positivo`, async () => {
+    scenario.insertedSubtask.target_date = targetDate;
+    scenario.insertedSubtask.estimated_hours = '0.5';
+    const { response, body } = await postSubtask({ targetDate, estimatedHours: 0.5 });
+    assert.equal(response.status, 201);
+    assert.equal(calls.insert.value.target_date, targetDate);
+    assert.equal(calls.insert.value.estimated_hours, 0.5);
+    assert.equal(body.targetDate, targetDate);
+    assert.equal(body.estimatedHours, 0.5);
+  });
+}
+
+for (const [targetDate, message] of [
+  ['2026-10-02', 'La fecha no puede ser anterior a hoy.'],
+  ['2026-10-16', 'La fecha no puede ser posterior a la fecha del evento.'],
+]) {
+  test(`POST rechaza fecha fuera del intervalo: ${targetDate}`, async () => {
+    const { response, body } = await postSubtask({ targetDate });
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, 'VALIDATION_ERROR');
+    assert.equal(body.error.fields.targetDate, message);
+    assert.equal(calls.insert, null);
+    assert.ok(calls.filters.some(filter => filter.column === 'owner_id' && filter.value === USER_ID));
+  });
+}
+
+for (const estimatedHours of [0, -1, '1.5']) {
+  test(`POST rechaza horas inválidas ${JSON.stringify(estimatedHours)}`, async () => {
+    const { response, body } = await postSubtask({ estimatedHours });
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, 'VALIDATION_ERROR');
+    assert.ok(body.error.fields.estimatedHours);
+    assert.equal(calls.insert, null);
+  });
+}
+
+test('evento pasado bloquea nueva subtarea sin borrar su historial', async () => {
+  scenario.event.date = '2026-10-02';
+  const result = await postSubtask({ targetDate: REFERENCE_DATE });
+  assert.equal(result.response.status, 400);
+  assert.equal(result.body.error.code, 'VALIDATION_ERROR');
+  assert.equal(calls.insert, null);
+  scenario.insertedSubtask.target_date = '2026-10-01';
+  scenario.subtasks = [scenario.insertedSubtask];
+  const listed = await request(`/api/eventos/${EVENT_ID}/subtareas`);
+  assert.equal(listed.response.status, 200);
+  assert.equal(listed.body[0].targetDate, '2026-10-01');
+});
+
+test('fecha del evento inconsistente devuelve 500 controlado', async () => {
+  scenario.event.date = '2026-02-30';
+  const { response, body } = await postSubtask();
+  assert.equal(response.status, 500);
+  assert.equal(body.error.code, 'INTERNAL_ERROR');
+  assert.equal(calls.insert, null);
 });

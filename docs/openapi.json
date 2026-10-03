@@ -245,7 +245,7 @@
       "post": {
         "tags": ["Eventos"],
         "summary": "Crear un evento",
-        "description": "Crea un evento asociado al usuario autenticado.",
+        "description": "Crea un evento asociado al usuario autenticado. La fecha de un nuevo evento debe ser igual o posterior a hoy en America/Bogota. Esta regla no modifica eventos históricos existentes.",
         "operationId": "createEvent",
         "security": [{ "BearerAuth": [] }],
         "requestBody": {
@@ -363,7 +363,7 @@
       "post": {
         "tags": ["Subtareas"],
         "summary": "Crear una subtarea",
-        "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL.",
+        "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL. Para nuevas subtareas: fecha actual en America/Bogota <= targetDate <= fecha del evento, con límites inclusivos. No se pueden crear subtareas para eventos pasados; el historial existente se conserva.",
         "operationId": "createSubtask",
         "security": [{ "BearerAuth": [] }],
         "parameters": [
@@ -413,6 +413,26 @@
                   "$ref": "#/components/schemas/ErrorResponse"
                 },
                 "examples": {
+                  "dateBeforeToday": {
+                    "summary": "Fecha anterior a hoy en Bogotá",
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Revisa los campos indicados.",
+                        "fields": { "targetDate": "La fecha no puede ser anterior a hoy." }
+                      }
+                    }
+                  },
+                  "dateAfterEvent": {
+                    "summary": "Fecha posterior al evento",
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Revisa los campos indicados.",
+                        "fields": { "targetDate": "La fecha no puede ser posterior a la fecha del evento." }
+                      }
+                    }
+                  },
                   "validationError": {
                     "summary": "Horas estimadas inválidas",
                     "value": {
@@ -655,7 +675,7 @@
           "date": {
             "type": "string",
             "format": "date",
-            "description": "Fecha del evento en formato YYYY-MM-DD.",
+            "description": "Fecha del evento en formato YYYY-MM-DD. Al crear debe ser igual o posterior a hoy en America/Bogota.",
             "example": "2026-10-15"
           },
           "time": {
@@ -750,7 +770,7 @@
           "targetDate": {
             "type": "string",
             "format": "date",
-            "description": "Fecha objetivo en formato YYYY-MM-DD.",
+            "description": "Fecha objetivo en formato YYYY-MM-DD. Al crear: no anterior a hoy en America/Bogota ni posterior a la fecha del evento.",
             "example": "2026-10-10"
           },
           "estimatedHours": {

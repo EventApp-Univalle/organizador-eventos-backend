@@ -1,5 +1,6 @@
 const express = require('express');
 const supabase = require('./supabase');
+const { getBogotaDate, isCalendarDate } = require('./tareas.utils');
 const {
   validateEventBody,
   validateSubtaskBody,
@@ -69,7 +70,7 @@ function internalErrorResponse(res, operation, error) {
 function findOwnedEvent(id, userId) {
   return supabase
     .from('events')
-    .select('id')
+    .select('id,date')
     .eq('id', id)
     .eq('owner_id', userId)
     .maybeSingle();
@@ -148,6 +149,15 @@ router.post('/', async (req, res) => {
   }
 
   const event = validation.value;
+  if (event.date < getBogotaDate()) {
+    return res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Revisa los campos indicados.',
+        fields: { date: 'La fecha del evento no puede ser anterior a hoy.' },
+      },
+    });
+  }
 
   const { error: profileError } = await ensureUserProfile(req.user);
   if (profileError) {
@@ -222,6 +232,24 @@ router.post('/:id/subtareas', async (req, res) => {
   }
 
   const subtask = validation.value;
+  if (!isCalendarDate(event.date)) {
+    return internalErrorResponse(res, 'comprobar la fecha del evento', new Error('Fecha inconsistente.'));
+  }
+  const today = getBogotaDate();
+  const dateError = subtask.targetDate < today
+    ? 'La fecha no puede ser anterior a hoy.'
+    : subtask.targetDate > event.date
+      ? 'La fecha no puede ser posterior a la fecha del evento.'
+      : null;
+  if (dateError) {
+    return res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Revisa los campos indicados.',
+        fields: { targetDate: dateError },
+      },
+    });
+  }
 
   const { data, error } = await supabase
     .from('subtasks')

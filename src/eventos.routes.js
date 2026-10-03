@@ -1,6 +1,5 @@
 const express = require('express');
 const supabase = require('./supabase');
-const config = require('./config');
 const {
   validateEventBody,
   validateSubtaskBody,
@@ -66,13 +65,36 @@ function internalErrorResponse(res, operation, error) {
   });
 }
 
-function findOwnedEvent(id) {
+function findOwnedEvent(id, userId) {
   return supabase
     .from('events')
     .select('id')
     .eq('id', id)
-    .eq('owner_id', config.demoUserId)
+    .eq('owner_id', userId)
     .maybeSingle();
+}
+
+async function ensureUserProfile(user) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (error || data) return { error };
+
+  const name = [
+    user.user_metadata?.name,
+    user.user_metadata?.full_name,
+    typeof user.email === 'string' ? user.email.split('@')[0] : null,
+    'Usuario',
+  ].find((value) => typeof value === 'string' && value.trim()).trim();
+
+  // ON CONFLICT DO NOTHING preserves an existing profile in concurrent requests.
+  return supabase.from('users').upsert(
+    { id: user.id, name },
+    { onConflict: 'id', ignoreDuplicates: true }
+  );
 }
 
 router.post('/', async (req, res) => {
@@ -90,10 +112,15 @@ router.post('/', async (req, res) => {
 
   const event = validation.value;
 
+  const { error: profileError } = await ensureUserProfile(req.user);
+  if (profileError) {
+    return internalErrorResponse(res, 'preparar el perfil del usuario', profileError);
+  }
+
   const { data, error } = await supabase
     .from('events')
     .insert({
-      owner_id: config.demoUserId,
+      owner_id: req.user.id,
       title: event.title,
       type: event.type,
       date: event.date,
@@ -143,7 +170,7 @@ router.post('/:id/subtareas', async (req, res) => {
     });
   }
 
-  const { data: event, error: eventError } = await findOwnedEvent(id);
+  const { data: event, error: eventError } = await findOwnedEvent(id, req.user.id);
 
   if (eventError) {
     return internalErrorResponse(
@@ -184,7 +211,7 @@ router.get('/:id/subtareas', async (req, res) => {
     return invalidEventIdResponse(res);
   }
 
-  const { data: event, error: eventError } = await findOwnedEvent(id);
+  const { data: event, error: eventError } = await findOwnedEvent(id, req.user.id);
 
   if (eventError) {
     return internalErrorResponse(
@@ -223,7 +250,7 @@ router.get('/:id', async (req, res) => {
     .from('events')
     .select('*')
     .eq('id', id)
-    .eq('owner_id', config.demoUserId)
+    .eq('owner_id', req.user.id)
     .maybeSingle();
 
   if (error) {

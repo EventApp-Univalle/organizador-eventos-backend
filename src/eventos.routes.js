@@ -335,4 +335,123 @@ router.get('/:id', async (req, res) => {
 
   return res.status(200).json(mapEvent(data));
 });
+
+function validationResponse(res, fields, message = 'Revisa los campos indicados.') {
+  return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message, fields } });
+}
+
+function subtaskNotFoundResponse(res) {
+  return res.status(404).json({ error: { code: 'SUBTASK_NOT_FOUND', message: 'Subtarea no encontrada.' } });
+}
+
+async function ownedCrudEvent(req, res) {
+  if (!isValidUuid(req.params.id)) {
+    invalidEventIdResponse(res);
+    return null;
+  }
+  const { data, error } = await findOwnedEvent(req.params.id, req.user.id);
+  if (error) { internalErrorResponse(res, 'comprobar el evento', error); return null; }
+  if (!data) { eventNotFoundResponse(res); return null; }
+  return data;
+}
+
+async function ownedCrudSubtask(req, res) {
+  if (!isValidUuid(req.params.subtaskId)) {
+    validationResponse(res, { subtaskId: 'Debe ser un UUID válido.' });
+    return null;
+  }
+  const { data, error } = await supabase.from('subtasks').select('*')
+    .eq('id', req.params.subtaskId).eq('event_id', req.params.id).maybeSingle();
+  if (error) { internalErrorResponse(res, 'comprobar la subtarea', error); return null; }
+  if (!data) { subtaskNotFoundResponse(res); return null; }
+  return data;
+}
+
+router.patch('/:id', async (req, res) => {
+  const event = await ownedCrudEvent(req, res);
+  if (!event) return;
+  const validation = validateEventBody(req.body, { partial: true });
+  if (!validation.valid) return validationResponse(res, validation.fields);
+  const value = validation.value;
+  if (value.date !== undefined) {
+    if (value.date < getBogotaDate()) {
+      return validationResponse(res, { date: 'La fecha del evento no puede ser anterior a hoy.' });
+    }
+    if (value.date !== event.date) {
+      // One matching row suffices; no truncation of the conflict check.
+      const { data, error } = await supabase.from('subtasks').select('id')
+        .eq('event_id', req.params.id).gt('target_date', value.date).limit(1);
+      if (error || !Array.isArray(data)) return internalErrorResponse(res, 'comprobar fechas', error || new Error('Datos inconsistentes.'));
+      if (data.length) return validationResponse(res,
+        { date: 'Hay subtareas con fecha posterior a la nueva fecha del evento.' },
+        'Hay subtareas con fecha posterior a la nueva fecha del evento.');
+    }
+  }
+  const changes = { ...value };
+  if (Object.hasOwn(changes, 'isPriority')) {
+    changes.is_priority = changes.isPriority;
+    delete changes.isPriority;
+  }
+  const { data, error } = await supabase.from('events').update(changes)
+    .eq('id', req.params.id).eq('owner_id', req.user.id).select('*').maybeSingle();
+  if (error) return internalErrorResponse(res, 'editar el evento', error);
+  if (!data) return eventNotFoundResponse(res);
+  return res.status(200).json(mapEvent(data));
+});
+
+router.delete('/:id', async (req, res) => {
+  const event = await ownedCrudEvent(req, res);
+  if (!event) return;
+  const { data: children, error: childrenError } = await supabase.from('subtasks')
+    .select('id').eq('event_id', req.params.id).limit(1);
+  if (childrenError || !Array.isArray(children)) return internalErrorResponse(res, 'comprobar subtareas', childrenError || new Error('Datos inconsistentes.'));
+  const conflict = () => res.status(400).json({ error: {
+    code: 'EVENT_HAS_SUBTASKS', message: 'Primero elimina las subtareas de este evento.',
+  } });
+  if (children.length) return conflict();
+  const { data, error } = await supabase.from('events').delete()
+    .eq('id', req.params.id).eq('owner_id', req.user.id).select('id').maybeSingle();
+  // The existing RESTRICT FK also protects a concurrent insertion.
+  if (error?.code === '23503') return conflict();
+  if (error) return internalErrorResponse(res, 'eliminar el evento', error);
+  if (!data) return eventNotFoundResponse(res);
+  return res.status(200).json({ id: data.id, deleted: true });
+});
+
+router.patch('/:id/subtareas/:subtaskId', async (req, res) => {
+  const event = await ownedCrudEvent(req, res);
+  if (!event) return;
+  const subtask = await ownedCrudSubtask(req, res);
+  if (!subtask) return;
+  const validation = validateSubtaskBody(req.body, { partial: true });
+  if (!validation.valid) return validationResponse(res, validation.fields);
+  const value = validation.value;
+  if (value.targetDate !== undefined && value.targetDate !== subtask.target_date) {
+    const message = value.targetDate < getBogotaDate() ? 'La fecha no puede ser anterior a hoy.'
+      : value.targetDate > event.date ? 'La fecha no puede ser posterior a la fecha del evento.' : null;
+    if (message) return validationResponse(res, { targetDate: message });
+  }
+  const changes = {};
+  if (Object.hasOwn(value, 'title')) changes.title = value.title;
+  if (Object.hasOwn(value, 'targetDate')) changes.target_date = value.targetDate;
+  if (Object.hasOwn(value, 'estimatedHours')) changes.estimated_hours = value.estimatedHours;
+  const { data, error } = await supabase.from('subtasks').update(changes)
+    .eq('id', req.params.subtaskId).eq('event_id', req.params.id).select('*').maybeSingle();
+  if (error) return internalErrorResponse(res, 'editar la subtarea', error);
+  if (!data) return subtaskNotFoundResponse(res);
+  return res.status(200).json(mapSubtask(data));
+});
+
+router.delete('/:id/subtareas/:subtaskId', async (req, res) => {
+  const event = await ownedCrudEvent(req, res);
+  if (!event) return;
+  const subtask = await ownedCrudSubtask(req, res);
+  if (!subtask) return;
+  const { data, error } = await supabase.from('subtasks').delete()
+    .eq('id', req.params.subtaskId).eq('event_id', req.params.id).select('id').maybeSingle();
+  if (error) return internalErrorResponse(res, 'eliminar la subtarea', error);
+  if (!data) return subtaskNotFoundResponse(res);
+  return res.status(200).json({ id: data.id, deleted: true });
+});
+
 module.exports = router;

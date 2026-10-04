@@ -38,6 +38,7 @@ test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1 y 2', 
     '/api/eventos',
     '/api/eventos/{id}',
     '/api/eventos/{id}/subtareas',
+    '/api/eventos/{id}/subtareas/{subtaskId}',
     '/api/tareas/hoy',
     '/health',
   ]);
@@ -128,4 +129,20 @@ test('todas las referencias internas de OpenAPI tienen destino', () => {
     for (const child of Object.values(value)) visit(child);
   }
   visit(document);
+});
+
+test('CRUD documenta PATCH parcial, DELETE, Bearer y todos los errores', () => {
+  for (const path of ['/api/eventos/{id}', '/api/eventos/{id}/subtareas/{subtaskId}']) {
+    for (const method of ['patch', 'delete']) {
+      const op = document.paths[path][method];
+      assert.deepEqual(Object.keys(op.responses).sort(), ['200','400','401','404','500']);
+      assert.deepEqual(op.security, [{ BearerAuth: [] }]);
+      assert.equal(Boolean(op.requestBody), method === 'patch');
+    }
+  }
+  for (const name of ['EventPatch','SubtaskPatch']) {
+    assert.equal(document.components.schemas[name].additionalProperties, false);
+    assert.equal(document.components.schemas[name].minProperties, 1);
+    assert.equal(document.components.schemas[name].required, undefined);
+  }
 });

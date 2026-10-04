@@ -171,6 +171,226 @@
         }
       }
     },
+    "/api/eventos/{id}/subtareas/{subtaskId}": {
+      "patch": {
+        "tags": [
+          "Subtareas"
+        ],
+        "summary": "Editar parcialmente subtarea",
+        "operationId": "updateSubtask",
+        "description": "Solo recursos del usuario autenticado. Solo campos enviados; body no vacío. Si targetDate cambia, hoy Bogotá <= targetDate <= fecha del evento. Si se mantiene la fecha histórica, permite editar título/esfuerzo.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "name": "subtaskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubtaskPatch"
+              },
+              "example": {
+                "title": "Título actualizado",
+                "estimatedHours": 1.5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registro actualizado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Subtask"
+                },
+                "example": {
+                  "id": "c3c05d7d-b962-485e-9bfd-63a26ac068f0",
+                  "eventId": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                  "title": "Título actualizado",
+                  "targetDate": "2026-10-10",
+                  "estimatedHours": 1.5,
+                  "createdAt": "2026-09-26T15:25:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validación o conflicto de negocio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "validation": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Revisa los campos indicados.",
+                        "fields": {
+                          "targetDate": "La fecha no puede ser anterior a hoy."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Evento no disponible o subtarea no encontrada dentro del evento propio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "event": {
+                    "value": {
+                      "error": {
+                        "code": "EVENT_NOT_FOUND",
+                        "message": "Evento no encontrado."
+                      }
+                    }
+                  },
+                  "subtask": {
+                    "value": {
+                      "error": {
+                        "code": "SUBTASK_NOT_FOUND",
+                        "message": "Subtarea no encontrada."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Subtareas"
+        ],
+        "summary": "Eliminar subtarea",
+        "operationId": "deleteSubtask",
+        "description": "Solo recursos del usuario autenticado. Comprueba propiedad del evento y relación de la subtarea.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "name": "subtaskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eliminación confirmada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionResponse"
+                },
+                "example": {
+                  "id": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                  "deleted": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validación o conflicto de negocio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "validation": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Revisa los campos indicados.",
+                        "fields": {
+                          "targetDate": "La fecha no puede ser anterior a hoy."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Evento no disponible o subtarea no encontrada dentro del evento propio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "event": {
+                    "value": {
+                      "error": {
+                        "code": "EVENT_NOT_FOUND",
+                        "message": "Evento no encontrado."
+                      }
+                    }
+                  },
+                  "subtask": {
+                    "value": {
+                      "error": {
+                        "code": "SUBTASK_NOT_FOUND",
+                        "message": "Subtarea no encontrada."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/eventos": {
       "get": {
         "tags": [
@@ -311,6 +531,155 @@
       }
     },
     "/api/eventos/{id}": {
+      "patch": {
+        "tags": [
+          "Eventos"
+        ],
+        "summary": "Editar parcialmente evento",
+        "operationId": "updateEvent",
+        "description": "Solo recursos del usuario autenticado. Solo campos enviados; body no vacío. Si se envía date, debe ser >= hoy Bogotá. Si date cambia, ninguna subtarea puede quedar después. No se reprograman subtareas.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventPatch"
+              },
+              "example": {
+                "title": "Título actualizado"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registro actualizado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                },
+                "example": {
+                  "id": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                  "title": "Título actualizado",
+                  "type": "Cultural",
+                  "date": "2026-10-15",
+                  "time": "18:30",
+                  "location": "Auditorio",
+                  "description": "Prueba Sprint 1",
+                  "isPriority": true,
+                  "createdAt": "2026-09-26T15:20:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validación o conflicto de negocio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "dateConflict": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Hay subtareas con fecha posterior a la nueva fecha del evento.",
+                        "fields": {
+                          "date": "Hay subtareas con fecha posterior a la nueva fecha del evento."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Eventos"
+        ],
+        "summary": "Eliminar evento",
+        "operationId": "deleteEvent",
+        "description": "Solo recursos del usuario autenticado. Rechaza con 400 EVENT_HAS_SUBTASKS si existen subtareas; eliminarlas primero. No hay cascade.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eliminación confirmada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionResponse"
+                },
+                "example": {
+                  "id": "8f28dd90-3ed7-4ef9-8e61-8a89c0f7b24c",
+                  "deleted": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validación o conflicto de negocio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "hasSubtasks": {
+                    "value": {
+                      "error": {
+                        "code": "EVENT_HAS_SUBTASKS",
+                        "message": "Primero elimina las subtareas de este evento."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
       "get": {
         "tags": ["Eventos"],
         "summary": "Consultar un evento",
@@ -817,6 +1186,102 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "EventPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nombre del evento.",
+            "example": "Encuentro cultural"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tipo de evento.",
+            "example": "Cultural"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Si se envía: fecha igual o posterior a hoy America/Bogota. Si cambia: no anterior a ninguna subtarea del evento.",
+            "example": "2026-10-15"
+          },
+          "time": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Hora opcional en formato HH:mm.",
+            "example": "18:30"
+          },
+          "location": {
+            "type": "string",
+            "nullable": true,
+            "description": "Ubicación opcional.",
+            "example": "Auditorio"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Descripción opcional.",
+            "example": "Prueba Sprint 1"
+          },
+          "isPriority": {
+            "type": "boolean",
+            "default": false,
+            "description": "Indica si el evento es prioritario.",
+            "example": true
+          }
+        },
+        "minProperties": 1
+      },
+      "SubtaskPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Título de la subtarea.",
+            "example": "Confirmar sonido"
+          },
+          "targetDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Si cambia: hoy America/Bogota <= fecha objetivo <= fecha del evento. Si no cambia, se puede conservar la fecha histórica vencida.",
+            "example": "2026-10-10"
+          },
+          "estimatedHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "description": "Horas estimadas; debe ser un número JSON finito mayor que 0.",
+            "example": 1.5
+          }
+        },
+        "minProperties": 1
+      },
+      "DeletionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deleted": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         }
       },

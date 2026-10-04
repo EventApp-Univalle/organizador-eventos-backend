@@ -17,8 +17,8 @@ function isValidTime(value) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
-function validateEventBody(body) {
-  const fields = {};
+function validateEventBody(body, { partial = false } = {}) {
+  const fields = Object.create(null);
 
   const allowedFields = [
     'title',
@@ -39,21 +39,23 @@ function validateEventBody(body) {
     };
   }
 
+  if (partial && Object.keys(body).length === 0) fields.body = 'Envía al menos un campo para editar.';
+
   for (const key of Object.keys(body)) {
     if (!allowedFields.includes(key)) {
       fields[key] = 'Campo no permitido.';
     }
   }
 
-  if (typeof body.title !== 'string' || !body.title.trim()) {
+  if ((!partial || Object.hasOwn(body, 'title')) && (typeof body.title !== 'string' || !body.title?.trim())) {
     fields.title = 'El nombre del evento es obligatorio.';
   }
 
-  if (typeof body.type !== 'string' || !body.type.trim()) {
+  if ((!partial || Object.hasOwn(body, 'type')) && (typeof body.type !== 'string' || !body.type?.trim())) {
     fields.type = 'El tipo de evento es obligatorio.';
   }
 
-  if (typeof body.date !== 'string' || !isValidDate(body.date)) {
+  if ((!partial || Object.hasOwn(body, 'date')) && (typeof body.date !== 'string' || !isValidDate(body.date))) {
     fields.date = 'La fecha debe tener formato YYYY-MM-DD y ser válida.';
   }
 
@@ -90,22 +92,23 @@ function validateEventBody(body) {
     };
   }
 
+  const value = {
+    title: body.title?.trim(),
+    type: body.type?.trim(),
+    date: body.date,
+    time: body.time?.trim() || null,
+    location: body.location?.trim() || null,
+    description: body.description?.trim() || null,
+    isPriority: body.isPriority ?? false,
+  };
   return {
     valid: true,
-    value: {
-      title: body.title.trim(),
-      type: body.type.trim(),
-      date: body.date,
-      time: body.time?.trim() || null,
-      location: body.location?.trim() || null,
-      description: body.description?.trim() || null,
-      isPriority: body.isPriority ?? false,
-    },
+    value: Object.fromEntries(Object.entries(value).filter(([key]) => !partial || Object.hasOwn(body, key))),
   };
 }
 
-function validateSubtaskBody(body) {
-  const fields = {};
+function validateSubtaskBody(body, { partial = false } = {}) {
+  const fields = Object.create(null);
   const allowedFields = ['title', 'targetDate', 'estimatedHours'];
 
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -117,25 +120,29 @@ function validateSubtaskBody(body) {
     };
   }
 
+  if (partial && Object.keys(body).length === 0) fields.body = 'Envía al menos un campo para editar.';
+
   for (const key of Object.keys(body)) {
     if (!allowedFields.includes(key)) {
       fields[key] = 'Campo no permitido.';
     }
   }
 
-  if (typeof body.title !== 'string' || !body.title.trim()) {
+  if ((!partial || Object.hasOwn(body, 'title')) && (typeof body.title !== 'string' || !body.title?.trim())) {
     fields.title = 'El título de la subtarea es obligatorio.';
   }
 
-  if (typeof body.targetDate !== 'string' || !isValidDate(body.targetDate)) {
+  if ((!partial || Object.hasOwn(body, 'targetDate')) && (typeof body.targetDate !== 'string' || !isValidDate(body.targetDate))) {
     fields.targetDate =
       'La fecha objetivo debe tener formato YYYY-MM-DD y ser válida.';
   }
 
   if (
-    typeof body.estimatedHours !== 'number' ||
-    !Number.isFinite(body.estimatedHours) ||
-    body.estimatedHours <= 0
+    (!partial || Object.hasOwn(body, 'estimatedHours')) && (
+      typeof body.estimatedHours !== 'number' ||
+      !Number.isFinite(body.estimatedHours) ||
+      body.estimatedHours <= 0
+    )
   ) {
     fields.estimatedHours = 'Debe ser un número mayor que 0.';
   }
@@ -147,13 +154,14 @@ function validateSubtaskBody(body) {
     };
   }
 
+  const value = {
+    title: body.title?.trim(),
+    targetDate: body.targetDate,
+    estimatedHours: body.estimatedHours,
+  };
   return {
     valid: true,
-    value: {
-      title: body.title.trim(),
-      targetDate: body.targetDate,
-      estimatedHours: body.estimatedHours,
-    },
+    value: Object.fromEntries(Object.entries(value).filter(([key]) => !partial || Object.hasOwn(body, key))),
   };
 }
 

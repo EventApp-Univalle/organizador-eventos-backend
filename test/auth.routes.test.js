@@ -1,10 +1,12 @@
-const { test, before, after, beforeEach } = require('node:test');
+const { test, before, after, beforeEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 
 process.env.DOTENV_CONFIG_QUIET = 'true';
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY = 'test-secret';
+
+mock.method(require('../src/tareas.utils'), 'getBogotaDate', () => '2026-10-03');
 
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -292,4 +294,43 @@ test('/health es público', async () => {
   assert.equal(result.status, 200);
   assert.equal(result.body.estado, 'ok');
   assert.equal(calls.auth.length, 0);
+});
+
+for (const date of ['2026-10-03', '2030-01-01']) {
+  test(`crear evento permite hoy o futuro: ${date}`, async () => {
+    const result = await request('/api/eventos', {
+      authorization: 'Bearer test-a', method: 'POST', body: { ...eventBody, date },
+    });
+    assert.equal(result.status, 201);
+    assert.equal(result.body.date, date);
+    assert.equal(calls.events[0].date, date);
+    assert.equal(calls.events[0].owner_id, USER_A);
+  });
+}
+
+test('crear evento rechaza fecha pasada antes de provisionar perfil o persistir', async () => {
+  const result = await request('/api/eventos', {
+    authorization: 'Bearer test-a', method: 'POST', body: { ...eventBody, date: '2026-10-02' },
+  });
+  assert.equal(result.status, 400);
+  assert.deepEqual(result.body.error, {
+    code: 'VALIDATION_ERROR', message: 'Revisa los campos indicados.',
+    fields: { date: 'La fecha del evento no puede ser anterior a hoy.' },
+  });
+  assert.equal(calls.queries.length, 0);
+  assert.equal(calls.profiles.length, 0);
+  assert.equal(calls.events.length, 0);
+});
+
+test('crear evento conserva rechazo de formato y fechas calendario inválidas sin persistencia', async () => {
+  for (const date of ['2026-02-30', '2026-13-01', '03/10/2026']) {
+    const result = await request('/api/eventos', {
+      authorization: 'Bearer test-a', method: 'POST', body: { ...eventBody, date },
+    });
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error.code, 'VALIDATION_ERROR');
+    assert.ok(result.body.error.fields.date);
+  }
+  assert.equal(calls.queries.length, 0);
+  assert.equal(calls.events.length, 0);
 });

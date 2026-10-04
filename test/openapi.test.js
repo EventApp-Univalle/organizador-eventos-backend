@@ -38,11 +38,13 @@ test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1 y 2', 
     '/api/eventos',
     '/api/eventos/{id}',
     '/api/eventos/{id}/subtareas',
+    '/api/eventos/{id}/subtareas/{subtaskId}',
     '/api/tareas/hoy',
     '/health',
   ]);
   assert.ok(openapi.paths['/health'].get);
   assert.ok(openapi.paths['/api/eventos'].post);
+  assert.ok(openapi.paths['/api/eventos'].get);
   assert.ok(openapi.paths['/api/eventos/{id}'].get);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].post);
   assert.ok(openapi.paths['/api/eventos/{id}/subtareas'].get);
@@ -74,6 +76,18 @@ test('OpenAPI define Bearer JWT y protege todas las operaciones privadas', () =>
       }
     }
   }
+});
+
+test('colección de eventos documenta array, vacío y errores', () => {
+  const operation = document.paths['/api/eventos'].get;
+  assert.deepEqual(Object.keys(operation.responses).sort(), ['200', '400', '401', '500']);
+  const content = operation.responses['200'].content['application/json'];
+  assert.equal(content.schema.type, 'array');
+  assert.equal(content.schema.items.$ref, '#/components/schemas/Event');
+  assert.deepEqual(content.examples.empty.value, []);
+  assert.ok(content.examples.events.value.length > 0);
+  assert.equal(operation.requestBody, undefined);
+  assert.equal(operation.parameters, undefined);
 });
 
 test('Hoy documenta únicamente eventId y los cinco estados HTTP aprobados', () => {
@@ -115,4 +129,20 @@ test('todas las referencias internas de OpenAPI tienen destino', () => {
     for (const child of Object.values(value)) visit(child);
   }
   visit(document);
+});
+
+test('CRUD documenta PATCH parcial, DELETE, Bearer y todos los errores', () => {
+  for (const path of ['/api/eventos/{id}', '/api/eventos/{id}/subtareas/{subtaskId}']) {
+    for (const method of ['patch', 'delete']) {
+      const op = document.paths[path][method];
+      assert.deepEqual(Object.keys(op.responses).sort(), ['200','400','401','404','500']);
+      assert.deepEqual(op.security, [{ BearerAuth: [] }]);
+      assert.equal(Boolean(op.requestBody), method === 'patch');
+    }
+  }
+  for (const name of ['EventPatch','SubtaskPatch']) {
+    assert.equal(document.components.schemas[name].additionalProperties, false);
+    assert.equal(document.components.schemas[name].minProperties, 1);
+    assert.equal(document.components.schemas[name].required, undefined);
+  }
 });

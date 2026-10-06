@@ -29,12 +29,13 @@ after(async () => {
   }
 });
 
-test('openapi.json es JSON válido y solo documenta las rutas de Sprint 1 y 2', () => {
+test('openapi.json es JSON válido y documenta todas las rutas', () => {
   const openapiPath = path.join(__dirname, '..', 'docs', 'openapi.json');
   const openapi = JSON.parse(fs.readFileSync(openapiPath, 'utf8'));
 
   assert.match(openapi.openapi, /^3\./);
   assert.deepEqual(Object.keys(openapi.paths).sort(), [
+    '/api/configuracion/capacidad',
     '/api/eventos',
     '/api/eventos/{id}',
     '/api/eventos/{id}/subtareas',
@@ -58,7 +59,7 @@ test('Swagger UI responde en /api-docs', async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /text\/html/);
   assert.match(html, /id="swagger-ui"/);
-  assert.match(html, /EventApp API - Sprint 2/);
+  assert.match(html, /EventApp API - Sprint 3/);
 });
 
 test('OpenAPI define Bearer JWT y protege todas las operaciones privadas', () => {
@@ -135,7 +136,12 @@ test('CRUD documenta PATCH parcial, DELETE, Bearer y todos los errores', () => {
   for (const path of ['/api/eventos/{id}', '/api/eventos/{id}/subtareas/{subtaskId}']) {
     for (const method of ['patch', 'delete']) {
       const op = document.paths[path][method];
-      assert.deepEqual(Object.keys(op.responses).sort(), ['200','400','401','404','500']);
+      const expectedResponses = ['200', '400', '401', '404', '500'];
+      if (method === 'patch' && path === '/api/eventos/{id}/subtareas/{subtaskId}') {
+        expectedResponses.push('409');
+      }
+      expectedResponses.sort();
+      assert.deepEqual(Object.keys(op.responses).sort(), expectedResponses);
       assert.deepEqual(op.security, [{ BearerAuth: [] }]);
       assert.equal(Boolean(op.requestBody), method === 'patch');
     }

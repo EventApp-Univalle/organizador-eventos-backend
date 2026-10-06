@@ -5,6 +5,7 @@ const config = require('./config');
 const eventosRouter = require('./eventos.routes');
 const tareasRouter = require('./tareas.routes');
 const authenticate = require('./auth.middleware');
+const configuracionRouter = require('./configuracion.routes');
 const openapiDocument = require('../docs/openapi.json');
 
 const app = express();
@@ -28,12 +29,13 @@ app.use(
   '/api-docs',
   swaggerUi.serve,
   swaggerUi.setup(openapiDocument, {
-    customSiteTitle: 'EventApp API - Sprint 2',
+    customSiteTitle: 'EventApp API - Sprint 3',
   })
 );
 
 app.use('/api/eventos', authenticate, eventosRouter);
 app.use('/api/tareas', authenticate, tareasRouter);
+app.use('/api/configuracion', authenticate, configuracionRouter);
 
 app.use((error, req, res, next) => {
   if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {

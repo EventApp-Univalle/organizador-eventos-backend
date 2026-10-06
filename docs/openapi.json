@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "EventApp API - Sprint 2",
-    "version": "2.0.0",
-    "description": "API REST de eventos, subtareas y vista Hoy de Sprint 2. Las rutas privadas usan el usuario autenticado por Supabase Auth y aíslan sus datos."
+    "title": "EventApp API - Sprint 3",
+    "version": "3.0.0",
+    "description": "API REST de EventApp: eventos, subtareas, vista Hoy y configuración de capacidad diaria. Las rutas privadas usan Supabase Auth y aíslan datos por usuario."
   },
   "servers": [
     {
@@ -12,7 +12,10 @@
     }
   ],
   "tags": [
-    { "name": "Hoy", "description": "Subtareas agrupadas del organizador autenticado" },
+    {
+      "name": "Hoy",
+      "description": "Subtareas agrupadas del organizador autenticado"
+    },
     {
       "name": "Estado",
       "description": "Estado del backend"
@@ -24,13 +27,19 @@
     {
       "name": "Subtareas",
       "description": "Creación y consulta del plan de subtareas de un evento"
+    },
+    {
+      "name": "Configuración",
+      "description": "Capacidad diaria del organizador"
     }
   ],
   "paths": {
     "/health": {
       "get": {
         "security": [],
-        "tags": ["Estado"],
+        "tags": [
+          "Estado"
+        ],
         "summary": "Consultar el estado del backend",
         "operationId": "getHealth",
         "responses": {
@@ -285,6 +294,27 @@
               }
             }
           },
+          "409": {
+            "description": "La reprogramación supera el límite diario de capacidad.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": {
+                    "code": "DAILY_CAPACITY_EXCEEDED",
+                    "message": "Al reprogramar, la fecha tendría 7 h, superando tu límite diario de 6 h.",
+                    "details": {
+                      "targetDate": "2026-10-12",
+                      "totalHours": 7,
+                      "limitHours": 6
+                    }
+                  }
+                }
+              }
+            }
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
@@ -463,11 +493,17 @@
         }
       },
       "post": {
-        "tags": ["Eventos"],
+        "tags": [
+          "Eventos"
+        ],
         "summary": "Crear un evento",
         "description": "Crea un evento asociado al usuario autenticado. La fecha de un nuevo evento debe ser igual o posterior a hoy en America/Bogota. Esta regla no modifica eventos históricos existentes.",
         "operationId": "createEvent",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -681,11 +717,17 @@
         }
       },
       "get": {
-        "tags": ["Eventos"],
+        "tags": [
+          "Eventos"
+        ],
         "summary": "Consultar un evento",
         "description": "Obtiene un evento del usuario autenticado por su UUID.",
         "operationId": "getEventById",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/EventId"
@@ -716,11 +758,11 @@
           "400": {
             "$ref": "#/components/responses/InvalidEventId"
           },
-          "404": {
-            "$ref": "#/components/responses/EventNotFound"
-          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -730,11 +772,17 @@
     },
     "/api/eventos/{id}/subtareas": {
       "post": {
-        "tags": ["Subtareas"],
+        "tags": [
+          "Subtareas"
+        ],
         "summary": "Crear una subtarea",
         "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL. Para nuevas subtareas: fecha actual en America/Bogota <= targetDate <= fecha del evento, con límites inclusivos. No se pueden crear subtareas para eventos pasados; el historial existente se conserva.",
         "operationId": "createSubtask",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/EventId"
@@ -788,7 +836,9 @@
                       "error": {
                         "code": "VALIDATION_ERROR",
                         "message": "Revisa los campos indicados.",
-                        "fields": { "targetDate": "La fecha no puede ser anterior a hoy." }
+                        "fields": {
+                          "targetDate": "La fecha no puede ser anterior a hoy."
+                        }
                       }
                     }
                   },
@@ -798,7 +848,9 @@
                       "error": {
                         "code": "VALIDATION_ERROR",
                         "message": "Revisa los campos indicados.",
-                        "fields": { "targetDate": "La fecha no puede ser posterior a la fecha del evento." }
+                        "fields": {
+                          "targetDate": "La fecha no puede ser posterior a la fecha del evento."
+                        }
                       }
                     }
                   },
@@ -839,11 +891,11 @@
               }
             }
           },
-          "404": {
-            "$ref": "#/components/responses/EventNotFound"
-          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -851,11 +903,17 @@
         }
       },
       "get": {
-        "tags": ["Subtareas"],
+        "tags": [
+          "Subtareas"
+        ],
         "summary": "Listar las subtareas de un evento",
         "description": "Devuelve las subtareas del evento del usuario autenticado, ordenadas por createdAt ascendente y luego por id ascendente. Devuelve un arreglo vacío cuando el evento no tiene subtareas.",
         "operationId": "listEventSubtasks",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/EventId"
@@ -897,8 +955,111 @@
           "400": {
             "$ref": "#/components/responses/InvalidEventId"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "$ref": "#/components/responses/EventNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/configuracion/capacidad": {
+      "get": {
+        "tags": [
+          "Configuración"
+        ],
+        "summary": "Consultar el límite diario de capacidad",
+        "operationId": "getDailyCapacity",
+        "description": "Devuelve el límite diario efectivo del organizador autenticado. Si nunca se configuró, devuelve el default 6 con isDefault true.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuración de capacidad diaria.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityConfig"
+                },
+                "examples": {
+                  "configured": {
+                    "summary": "Capacidad personalizada",
+                    "value": {
+                      "dailyLimitHours": 8,
+                      "defaultDailyLimitHours": 6,
+                      "isDefault": false
+                    }
+                  },
+                  "default": {
+                    "summary": "Sin configurar",
+                    "value": {
+                      "dailyLimitHours": 6,
+                      "defaultDailyLimitHours": 6,
+                      "isDefault": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Configuración"
+        ],
+        "summary": "Establecer el límite diario de capacidad",
+        "operationId": "patchDailyCapacity",
+        "description": "Actualiza el límite diario de horas del organizador autenticado. dailyLimitHours debe ser un número entre 1 y 24.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CapacityPatch"
+              },
+              "example": {
+                "dailyLimitHours": 8
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Capacidad actualizada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityConfig"
+                },
+                "example": {
+                  "dailyLimitHours": 8,
+                  "defaultDailyLimitHours": 6,
+                  "isDefault": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1012,7 +1173,10 @@
       "HealthResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["estado", "mensaje"],
+        "required": [
+          "estado",
+          "mensaje"
+        ],
         "properties": {
           "estado": {
             "type": "string",
@@ -1027,7 +1191,11 @@
       "EventInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title", "type", "date"],
+        "required": [
+          "title",
+          "type",
+          "date"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -1128,7 +1296,11 @@
       "SubtaskInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title", "targetDate", "estimatedHours"],
+        "required": [
+          "title",
+          "targetDate",
+          "estimatedHours"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -1288,12 +1460,17 @@
       "ErrorResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["code", "message"],
+            "required": [
+              "code",
+              "message"
+            ],
             "properties": {
               "code": {
                 "type": "string",
@@ -1314,6 +1491,46 @@
                 }
               }
             }
+          }
+        }
+      },
+      "CapacityConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dailyLimitHours",
+          "defaultDailyLimitHours",
+          "isDefault"
+        ],
+        "properties": {
+          "dailyLimitHours": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 24,
+            "example": 8
+          },
+          "defaultDailyLimitHours": {
+            "type": "number",
+            "example": 6
+          },
+          "isDefault": {
+            "type": "boolean",
+            "example": false
+          }
+        }
+      },
+      "CapacityPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dailyLimitHours"
+        ],
+        "properties": {
+          "dailyLimitHours": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 24,
+            "example": 8
           }
         }
       }

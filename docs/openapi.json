@@ -1489,6 +1489,21 @@
                 "example": {
                   "title": "El nombre del evento es obligatorio."
                 }
+              },
+              "details": {
+                "type": "object",
+                "description": "Detalles adicionales; solo se incluye cuando aplica (ej. conflicto de capacidad).",
+                "additionalProperties": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                },
+                "example": {
+                  "targetDate": "2026-10-15",
+                  "totalHours": 7,
+                  "limitHours": 6
+                }
               }
             }
           }

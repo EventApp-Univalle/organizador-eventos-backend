@@ -165,11 +165,52 @@ function validateSubtaskBody(body, { partial = false } = {}) {
   };
 }
 
+const DAILY_CAPACITY = {
+  MIN: 1,
+  MAX: 24,
+  DEFAULT: 6,
+};
+
+function validateCapacityBody(body) {
+  const fields = Object.create(null);
+  const allowedFields = ['dailyLimitHours'];
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { valid: false, fields: { body: 'Debe ser un objeto JSON válido.' } };
+  }
+
+  for (const key of Object.keys(body)) {
+    if (!allowedFields.includes(key)) {
+      fields[key] = 'Campo no permitido.';
+    }
+  }
+
+  const value = body.dailyLimitHours;
+  if (!Object.hasOwn(body, 'dailyLimitHours')) {
+    fields.dailyLimitHours = 'Es obligatorio.';
+  } else if (typeof value !== 'number' || !Number.isFinite(value)) {
+    fields.dailyLimitHours = 'Debe ser un número.';
+  } else if (value < DAILY_CAPACITY.MIN || value > DAILY_CAPACITY.MAX) {
+    fields.dailyLimitHours = `Debe ser un número entre ${DAILY_CAPACITY.MIN} y ${DAILY_CAPACITY.MAX}.`;
+  }
+
+  if (Object.keys(fields).length > 0) {
+    return { valid: false, fields };
+  }
+
+  return {
+    valid: true,
+    value: { dailyLimitHours: Math.round(value * 100) / 100 },
+  };
+}
+
 function isValidUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 module.exports = {
   validateEventBody,
   validateSubtaskBody,
+  validateCapacityBody,
   isValidUuid,
+  DAILY_CAPACITY,
 };

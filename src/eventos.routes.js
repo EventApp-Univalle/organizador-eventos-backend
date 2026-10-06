@@ -6,6 +6,8 @@ const {
   validateSubtaskBody,
   isValidUuid,
 } = require('./validation');
+const { ensureUserProfile } = require('./users.utils');
+const { getDailyLimit, sumDailyHours, round2 } = require('./capacity.utils');
 
 const router = express.Router();
 const PAGE_SIZE = 500;
@@ -74,29 +76,6 @@ function findOwnedEvent(id, userId) {
     .eq('id', id)
     .eq('owner_id', userId)
     .maybeSingle();
-}
-
-async function ensureUserProfile(user) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (error || data) return { error };
-
-  const name = [
-    user.user_metadata?.name,
-    user.user_metadata?.full_name,
-    typeof user.email === 'string' ? user.email.split('@')[0] : null,
-    'Usuario',
-  ].find((value) => typeof value === 'string' && value.trim()).trim();
-
-  // ON CONFLICT DO NOTHING preserves an existing profile in concurrent requests.
-  return supabase.from('users').upsert(
-    { id: user.id, name },
-    { onConflict: 'id', ignoreDuplicates: true }
-  );
 }
 
 router.get('/', async (req, res) => {
@@ -431,6 +410,35 @@ router.patch('/:id/subtareas/:subtaskId', async (req, res) => {
       : value.targetDate > event.date ? 'La fecha no puede ser posterior a la fecha del evento.' : null;
     if (message) return validationResponse(res, { targetDate: message });
   }
+
+  if (value.targetDate !== undefined || value.estimatedHours !== undefined) {
+    const effectiveDate = value.targetDate ?? subtask.target_date;
+    const effectiveHours = value.estimatedHours ?? Number(subtask.estimated_hours);
+
+    const { limit, error: limitError } = await getDailyLimit(req.user.id);
+    if (limitError) return internalErrorResponse(res, 'consultar la capacidad diaria', limitError);
+
+    const { total, error: totalError } = await sumDailyHours(req.user.id, effectiveDate, {
+      excludeSubtaskId: subtask.id,
+    });
+    if (totalError) return internalErrorResponse(res, 'calcular la carga diaria', totalError);
+
+    const projectedHours = round2(total + effectiveHours);
+    if (projectedHours > limit) {
+      return res.status(409).json({
+        error: {
+          code: 'DAILY_CAPACITY_EXCEEDED',
+          message: `Al reprogramar, la fecha tendría ${projectedHours} h, superando tu límite diario de ${limit} h.`,
+          details: {
+            targetDate: effectiveDate,
+            totalHours: projectedHours,
+            limitHours: limit,
+          },
+        },
+      });
+    }
+  }
+
   const changes = {};
   if (Object.hasOwn(value, 'title')) changes.title = value.title;
   if (Object.hasOwn(value, 'targetDate')) changes.target_date = value.targetDate;

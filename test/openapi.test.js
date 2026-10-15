@@ -152,3 +152,35 @@ test('CRUD documenta PATCH parcial, DELETE, Bearer y todos los errores', () => {
     assert.equal(document.components.schemas[name].required, undefined);
   }
 });
+
+
+test('409 de PATCH documenta sugerencias compatibles y motivo si no hay soluciones', () => {
+  const response = document.paths['/api/eventos/{id}/subtareas/{subtaskId}'].patch.responses['409'];
+  const content = response.content['application/json'];
+  assert.equal(content.schema.$ref, '#/components/schemas/DailyCapacityConflictResponse');
+  const details = document.components.schemas.DailyCapacityConflictDetails;
+  assert.deepEqual(details.required, ['targetDate', 'totalHours', 'limitHours', 'suggestions']);
+  assert.equal(details.properties.suggestions.maxItems, 4);
+  assert.deepEqual(document.components.schemas.CapacitySuggestion.properties.strategy.enum, ['CHANGE_DATE', 'ADJUST_HOURS']);
+  const withSuggestions = content.examples.withSuggestions.value.error;
+  assert.equal(withSuggestions.code, 'DAILY_CAPACITY_EXCEEDED');
+  assert.equal(withSuggestions.details.suggestions.length, 4);
+  assert.ok(withSuggestions.details.suggestions.every(s => s.estimatedHours > 0));
+  const none = content.examples.noSuggestions.value.error.details;
+  assert.deepEqual(none.suggestions, []);
+  assert.ok(none.noSuggestionsReason.length);
+});
+
+
+test('POST de subtareas documenta 409 con el mismo contrato de sugerencias que PATCH y conserva 201', () => {
+  const post = document.paths['/api/eventos/{id}/subtareas'].post;
+  const patch = document.paths['/api/eventos/{id}/subtareas/{subtaskId}'].patch;
+  assert.deepEqual(Object.keys(post.responses).sort(), ['201', '400', '401', '404', '409', '500']);
+  const conflict = post.responses['409'].content['application/json'];
+  assert.deepEqual(conflict.schema, patch.responses['409'].content['application/json'].schema);
+  assert.equal(conflict.examples.withSuggestions.value.error.code, 'DAILY_CAPACITY_EXCEEDED');
+  assert.ok(conflict.examples.withSuggestions.value.error.details.suggestions.length);
+  assert.ok(conflict.examples.noSuggestions.value.error.details.noSuggestionsReason);
+  assert.match(post.description, /antes|Antes/);
+  assert.equal(post.responses['201'].content['application/json'].schema.$ref, '#/components/schemas/Subtask');
+});

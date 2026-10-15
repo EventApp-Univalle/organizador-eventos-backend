@@ -20,23 +20,26 @@ const client = {
   auth: { async getUser(token) { return {data:{user:{id:token==='a'?A:B}},error:null};} },
   from(table) {
     const filters=[], greater=[];
-    let operation='read', changes, limit=Infinity;
+    let operation='read', changes, limit=Infinity, joined=false, start=0, end=Infinity, fromDate, toDate;
     queries.push({table,filters,greater});
     function execute(single=false) {
       if(failure || (operation!=='read' && writeFailure)) return {data:null,error:failure || writeFailure};
-      const rows = table==='events'?events:subtasks;
-      const matched = rows.filter(row=>filters.every(([key,value])=>row[key]===value)&&greater.every(([key,value])=>row[key]>value)).slice(0,limit);
+      const rows = table==='users'?[]:table==='events'?events:joined?subtasks.map(row=>({...row,event:{owner_id:events.find(event=>event.id===row.event_id)?.owner_id}})):subtasks;
+      const matched = rows.filter(row=>filters.every(([key,value])=>(key==='event.owner_id'?row.event?.owner_id:row[key])===value)&&greater.every(([key,value])=>row[key]>value)).slice(0,limit);
       if(operation==='delete' && table==='events' && deleteRace) return {data:null,error:{code:'23503',message:'interno'}};
       if(operation!=='read') {
         writes.push({table,operation,changes,filters:[...filters]});
         if(operation==='update') matched.forEach(row=>Object.assign(row,changes));
         else matched.forEach(row=>rows.splice(rows.indexOf(row),1));
       }
-      return {data:single?(matched[0]||null):matched,error:null};
+      const dated=matched.filter(row=>(!fromDate||row.target_date>=fromDate)&&(!toDate||row.target_date<=toDate));
+      return {data:single?(dated[0]||null):dated.slice(start,end+1),count:dated.length,error:null};
     }
     const query={
-      select(){return query;}, eq(key,value){filters.push([key,value]);return query;},
+      select(columns){joined=String(columns).includes('event:');return query;}, eq(key,value){filters.push([key,value]);return query;},
       gt(key,value){greater.push([key,value]);return query;}, limit(value){limit=value;return query;},
+      gte(key,value){fromDate=value;return query;}, lte(key,value){toDate=value;return query;},
+      order(){return query;}, range(from,to){start=from;end=to;return query;},
       update(value){operation='update';changes=value;return query;}, delete(){operation='delete';return query;},
       async maybeSingle(){return execute(true);}, then(resolve,reject){return Promise.resolve(execute()).then(resolve,reject);},
     };

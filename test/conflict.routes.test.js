@@ -1,10 +1,12 @@
-const { test, before, after, beforeEach } = require('node:test');
+const { test, before, after, beforeEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 
 process.env.DOTENV_CONFIG_QUIET = 'true';
 process.env.SUPABASE_URL ||= 'https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY ||= 'test-secret';
+
+mock.method(require('../src/tareas.utils'), 'getBogotaDate', () => '2026-10-03');
 
 const USER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const EVENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -49,10 +51,15 @@ const supabaseMock = {
     let operation = 'read';
     let changes;
     let selectColumns;
+    let fromDate, toDate, start = 0, end = Infinity;
 
     return {
       select(columns) { selectColumns = columns; return this; },
       eq() { return this; },
+      gte(key, value) { fromDate = value; return this; },
+      lte(key, value) { toDate = value; return this; },
+      order() { return this; },
+      range(from, to) { start = from; end = to; return this; },
       update(value) { operation = 'update'; changes = value; return this; },
       async maybeSingle() {
         if (scenario.error) return { data: null, error: scenario.error };
@@ -62,7 +69,9 @@ const supabaseMock = {
       },
       then(resolve, reject) {
         if (scenario.error) return Promise.resolve({ data: null, error: scenario.error }).then(resolve, reject);
-        return Promise.resolve({ data: readData(table, selectColumns), error: null }).then(resolve, reject);
+        const rows = scenario.dayTasks.map(row => ({ ...row, target_date: row.target_date || '2026-10-12', event: { owner_id: USER_ID } }))
+          .filter(row => row.target_date >= fromDate && row.target_date <= toDate);
+        return Promise.resolve({ data: rows.slice(start, end + 1), count: rows.length, error: null }).then(resolve, reject);
       },
     };
   },
@@ -116,7 +125,9 @@ test('reprogramar fecha con sobrecarga devuelve 409 con cifras', async () => {
   const { response, body } = await patchSubtask({ targetDate: '2026-10-12' });
   assert.equal(response.status, 409);
   assert.equal(body.error.code, 'DAILY_CAPACITY_EXCEEDED');
-  assert.deepEqual(body.error.details, {
+  const { suggestions, ...existing } = body.error.details;
+  assert.ok(suggestions.length > 0);
+  assert.deepEqual(existing, {
     targetDate: '2026-10-12',
     totalHours: 7,
     limitHours: 6,
@@ -124,7 +135,7 @@ test('reprogramar fecha con sobrecarga devuelve 409 con cifras', async () => {
 });
 
 test('aumentar horas en la misma fecha con sobrecarga devuelve 409', async () => {
-  scenario.dayTasks = [{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', estimated_hours: 5 }];
+  scenario.dayTasks = [{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', target_date: '2026-10-10', estimated_hours: 5 }];
   const { response, body } = await patchSubtask({ estimatedHours: 2.5 });
   assert.equal(response.status, 409);
   assert.equal(body.error.code, 'DAILY_CAPACITY_EXCEEDED');
@@ -148,8 +159,8 @@ test('editar solo el título no consulta la capacidad y guarda', async () => {
 
 test('la suma excluye la subtarea que se está editando', async () => {
   scenario.dayTasks = [
-    { id: SUBTASK_ID, estimated_hours: 2 },
-    { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', estimated_hours: 4 },
+    { id: SUBTASK_ID, target_date: '2026-10-10', estimated_hours: 2 },
+    { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', target_date: '2026-10-10', estimated_hours: 4 },
   ];
   const { response } = await patchSubtask({ estimatedHours: 2 });
   assert.equal(response.status, 200);

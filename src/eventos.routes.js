@@ -7,7 +7,7 @@ const {
   isValidUuid,
 } = require('./validation');
 const { ensureUserProfile } = require('./users.utils');
-const { getDailyLimit, sumDailyHours, round2 } = require('./capacity.utils');
+const { getDailyLimit, sumDailyHours, assessDailyLoad, suggestCapacityAlternatives } = require('./capacity.utils');
 
 const router = express.Router();
 const PAGE_SIZE = 500;
@@ -67,6 +67,28 @@ function internalErrorResponse(res, operation, error) {
       message: 'No fue posible completar la operación.',
     },
   });
+}
+
+// Both creation and editing must pass the same capacity check before writing.
+async function hasSubtaskCapacity(res, { userId, targetDate, estimatedHours, eventDate,
+  referenceDate, excludeSubtaskId = null, action = 'reprogramar' }) {
+  const { limit, error: limitError } = await getDailyLimit(userId);
+  if (limitError) { internalErrorResponse(res, 'consultar la capacidad diaria', limitError); return false; }
+  const { load, error: totalError } = await sumDailyHours(userId, targetDate, { excludeSubtaskId });
+  if (totalError) { internalErrorResponse(res, 'calcular la carga diaria', totalError); return false; }
+  const { projectedHours, exceeds } = assessDailyLoad(load, estimatedHours, limit);
+  if (!exceeds) return true;
+  let alternatives;
+  try {
+    alternatives = await suggestCapacityAlternatives({ userId, excludeSubtaskId,
+      targetDate, estimatedHours, limit, referenceDate, eventDate });
+  } catch (error) { internalErrorResponse(res, 'calcular alternativas de capacidad', error); return false; }
+  res.status(409).json({ error: {
+    code: 'DAILY_CAPACITY_EXCEEDED',
+    message: `Al ${action}, la fecha tendría ${projectedHours} h, superando tu límite diario de ${limit} h.`,
+    details: { targetDate, totalHours: projectedHours, limitHours: limit, ...alternatives },
+  } });
+  return false;
 }
 
 function findOwnedEvent(id, userId) {
@@ -229,6 +251,10 @@ router.post('/:id/subtareas', async (req, res) => {
       },
     });
   }
+
+  if (!await hasSubtaskCapacity(res, { userId: req.user.id, targetDate: subtask.targetDate,
+    estimatedHours: subtask.estimatedHours, eventDate: event.date,
+    referenceDate: today, action: 'crear la subtarea' })) return;
 
   const { data, error } = await supabase
     .from('subtasks')
@@ -405,8 +431,9 @@ router.patch('/:id/subtareas/:subtaskId', async (req, res) => {
   const validation = validateSubtaskBody(req.body, { partial: true });
   if (!validation.valid) return validationResponse(res, validation.fields);
   const value = validation.value;
+  const referenceDate = getBogotaDate();
   if (value.targetDate !== undefined && value.targetDate !== subtask.target_date) {
-    const message = value.targetDate < getBogotaDate() ? 'La fecha no puede ser anterior a hoy.'
+    const message = value.targetDate < referenceDate ? 'La fecha no puede ser anterior a hoy.'
       : value.targetDate > event.date ? 'La fecha no puede ser posterior a la fecha del evento.' : null;
     if (message) return validationResponse(res, { targetDate: message });
   }
@@ -415,28 +442,9 @@ router.patch('/:id/subtareas/:subtaskId', async (req, res) => {
     const effectiveDate = value.targetDate ?? subtask.target_date;
     const effectiveHours = value.estimatedHours ?? Number(subtask.estimated_hours);
 
-    const { limit, error: limitError } = await getDailyLimit(req.user.id);
-    if (limitError) return internalErrorResponse(res, 'consultar la capacidad diaria', limitError);
-
-    const { total, error: totalError } = await sumDailyHours(req.user.id, effectiveDate, {
-      excludeSubtaskId: subtask.id,
-    });
-    if (totalError) return internalErrorResponse(res, 'calcular la carga diaria', totalError);
-
-    const projectedHours = round2(total + effectiveHours);
-    if (projectedHours > limit) {
-      return res.status(409).json({
-        error: {
-          code: 'DAILY_CAPACITY_EXCEEDED',
-          message: `Al reprogramar, la fecha tendría ${projectedHours} h, superando tu límite diario de ${limit} h.`,
-          details: {
-            targetDate: effectiveDate,
-            totalHours: projectedHours,
-            limitHours: limit,
-          },
-        },
-      });
-    }
+    if (!await hasSubtaskCapacity(res, { userId: req.user.id, targetDate: effectiveDate,
+      estimatedHours: effectiveHours, excludeSubtaskId: subtask.id,
+      referenceDate, eventDate: event.date })) return;
   }
 
   const changes = {};

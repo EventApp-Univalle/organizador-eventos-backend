@@ -46,15 +46,21 @@ const supabaseMock = {
     },
   },
   from(table) {
+    let joined = false, fromDate, toDate, start = 0, end = Infinity;
     const builder = {
-      select() {
+      select(columns) {
+        joined = String(columns).includes('event:');
         return builder;
       },
       eq(column, value) {
         calls.filters.push({ table, column, value });
         return builder;
       },
+      gte(column, value) { fromDate = value; return builder; },
+      lte(column, value) { toDate = value; return builder; },
+      range(from, to) { start = from; end = to; return builder; },
       maybeSingle() {
+        if (table === 'users') return Promise.resolve({ data: null, error: null });
         return Promise.resolve({
           data: scenario.event,
           error: scenario.eventError,
@@ -75,6 +81,11 @@ const supabaseMock = {
         return builder;
       },
       then(resolve, reject) {
+        if (joined) {
+          const rows = scenario.subtasks.filter(row => row.target_date >= fromDate && row.target_date <= toDate)
+            .map(row => ({ ...row, event: { owner_id: USER_ID } }));
+          return Promise.resolve({ data: rows.slice(start, end + 1), count: rows.length, error: scenario.listError }).then(resolve, reject);
+        }
         return Promise.resolve({
           data: scenario.subtasks,
           error: scenario.listError,

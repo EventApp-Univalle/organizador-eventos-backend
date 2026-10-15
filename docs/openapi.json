@@ -187,7 +187,7 @@
         ],
         "summary": "Editar parcialmente subtarea",
         "operationId": "updateSubtask",
-        "description": "Solo recursos del usuario autenticado. Solo campos enviados; body no vacío. Si targetDate cambia, hoy Bogotá <= targetDate <= fecha del evento. Si se mantiene la fecha histórica, permite editar título/esfuerzo.",
+        "description": "Solo recursos del usuario autenticado. Solo campos enviados; body no vacío. Si targetDate cambia, hoy Bogotá <= targetDate <= fecha del evento. Si se mantiene la fecha histórica, permite editar título/esfuerzo. Si la carga excede el límite, rechaza todos los cambios con 409 y propone alternativas calculadas, sin reservar capacidad ni guardar automáticamente. Un fallo de lectura o listado incompleto devuelve 500. La verificación y escritura no son una transacción atómica; otra petición concurrente puede modificar la carga.",
         "security": [
           {
             "BearerAuth": []
@@ -295,20 +295,63 @@
             }
           },
           "409": {
-            "description": "La reprogramación supera el límite diario de capacidad.",
+            "description": "Sobrecarga diaria: PATCH rechazado sin persistir cambios. Alternativas calculadas con datos del usuario autenticado y plazo del evento; sin ventana fija de días. La propuesta puede quedar obsoleta y un reintento vuelve a calcular.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/DailyCapacityConflictResponse"
                 },
-                "example": {
-                  "error": {
-                    "code": "DAILY_CAPACITY_EXCEEDED",
-                    "message": "Al reprogramar, la fecha tendría 7 h, superando tu límite diario de 6 h.",
-                    "details": {
-                      "targetDate": "2026-10-12",
-                      "totalHours": 7,
-                      "limitHours": 6
+                "examples": {
+                  "withSuggestions": {
+                    "summary": "Hoy 2026-10-14, plazo 2026-10-18, 5 h ocupadas y 2 h solicitadas.",
+                    "value": {
+                      "error": {
+                        "code": "DAILY_CAPACITY_EXCEEDED",
+                        "message": "Al reprogramar, la fecha tendría 7 h, superando tu límite diario de 6 h.",
+                        "details": {
+                          "targetDate": "2026-10-15",
+                          "totalHours": 7,
+                          "limitHours": 6,
+                          "suggestions": [
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-14",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-16",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-17",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "ADJUST_HOURS",
+                              "targetDate": "2026-10-15",
+                              "estimatedHours": 1
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "noSuggestions": {
+                    "summary": "Todos los días hasta el plazo están llenos.",
+                    "value": {
+                      "error": {
+                        "code": "DAILY_CAPACITY_EXCEEDED",
+                        "message": "Al reprogramar, la fecha tendría 8 h, superando tu límite diario de 6 h.",
+                        "details": {
+                          "targetDate": "2026-10-15",
+                          "totalHours": 8,
+                          "limitHours": 6,
+                          "suggestions": [],
+                          "noSuggestionsReason": "No se encontraron fechas ni horas disponibles dentro del plazo del evento."
+                        }
+                      }
                     }
                   }
                 }
@@ -776,7 +819,7 @@
           "Subtareas"
         ],
         "summary": "Crear una subtarea",
-        "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL. Para nuevas subtareas: fecha actual en America/Bogota <= targetDate <= fecha del evento, con límites inclusivos. No se pueden crear subtareas para eventos pasados; el historial existente se conserva.",
+        "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL. Para nuevas subtareas: fecha actual en America/Bogota <= targetDate <= fecha del evento, con límites inclusivos. No se pueden crear subtareas para eventos pasados; el historial existente se conserva. Antes del INSERT comprueba la carga propia de todos los eventos en esa fecha con la capacidad personalizada o predeterminada. La igualdad con el límite se permite. Si supera el límite, responde 409 sin crear la subtarea y propone las mismas alternativas que PATCH. Un fallo de consulta o carga incompleta devuelve 500 sin insertar. Las sugerencias no reservan capacidad; todo reintento revalida. La comprobación y escritura no son una transacción atómica.",
         "operationId": "createSubtask",
         "security": [
           {
@@ -896,6 +939,70 @@
           },
           "404": {
             "$ref": "#/components/responses/EventNotFound"
+          },
+          "409": {
+            "description": "La nueva subtarea supera el límite diario. POST rechazado sin INSERT. Mismo contrato de detalles y sugerencias que PATCH, sin excluir ninguna subtarea existente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyCapacityConflictResponse"
+                },
+                "examples": {
+                  "withSuggestions": {
+                    "summary": "Hoy 2026-10-14, plazo 2026-10-18, 5 h ocupadas y 2 h solicitadas.",
+                    "value": {
+                      "error": {
+                        "code": "DAILY_CAPACITY_EXCEEDED",
+                        "message": "Al crear la subtarea, la fecha tendría 7 h, superando tu límite diario de 6 h.",
+                        "details": {
+                          "targetDate": "2026-10-15",
+                          "totalHours": 7,
+                          "limitHours": 6,
+                          "suggestions": [
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-14",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-16",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-17",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "ADJUST_HOURS",
+                              "targetDate": "2026-10-15",
+                              "estimatedHours": 1
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "noSuggestions": {
+                    "summary": "Todos los días hasta el plazo están llenos.",
+                    "value": {
+                      "error": {
+                        "code": "DAILY_CAPACITY_EXCEEDED",
+                        "message": "Al crear la subtarea, la fecha tendría 8 h, superando tu límite diario de 6 h.",
+                        "details": {
+                          "targetDate": "2026-10-15",
+                          "totalHours": 8,
+                          "limitHours": 6,
+                          "suggestions": [],
+                          "noSuggestionsReason": "No se encontraron fechas ni horas disponibles dentro del plazo del evento."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -1493,12 +1600,7 @@
               "details": {
                 "type": "object",
                 "description": "Detalles adicionales; solo se incluye cuando aplica (ej. conflicto de capacidad).",
-                "additionalProperties": {
-                  "type": [
-                    "number",
-                    "string"
-                  ]
-                },
+                "additionalProperties": true,
                 "example": {
                   "targetDate": "2026-10-15",
                   "totalHours": 7,
@@ -1546,6 +1648,113 @@
             "minimum": 1,
             "maximum": 24,
             "example": 8
+          }
+        }
+      },
+      "CapacitySuggestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "strategy",
+          "targetDate",
+          "estimatedHours"
+        ],
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "CHANGE_DATE",
+              "ADJUST_HOURS"
+            ]
+          },
+          "targetDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha calendario en America/Bogota, inclusiva entre hoy y la fecha del evento."
+          },
+          "estimatedHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "description": "CHANGE_DATE conserva la estimación completa. ADJUST_HOURS propone horas positivas que caben en la fecha solicitada; no se redondea hacia arriba."
+          }
+        }
+      },
+      "DailyCapacityConflictDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "targetDate",
+          "totalHours",
+          "limitHours",
+          "suggestions"
+        ],
+        "properties": {
+          "targetDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "totalHours": {
+            "type": "number"
+          },
+          "limitHours": {
+            "type": "number"
+          },
+          "suggestions": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "$ref": "#/components/schemas/CapacitySuggestion"
+            },
+            "description": "Primero hasta tres CHANGE_DATE ascendentes, sin la fecha solicitada, después como máximo un ADJUST_HOURS en esa fecha. Suma exacta de subtareas propias de todos los eventos, excluyendo la editada en PATCH y sin exclusión en POST; lectura completa paginada. No se guardan automáticamente y cada PATCH revalida."
+          },
+          "noSuggestionsReason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Presente si y solo si suggestions está vacío. Explica que no hay alternativas factibles dentro del plazo."
+          }
+        }
+      },
+      "DailyCapacityConflictResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "DAILY_CAPACITY_EXCEEDED"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "example": "Revisa los campos indicados."
+              },
+              "fields": {
+                "type": "object",
+                "description": "Errores por campo; solo se incluye cuando aplica.",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "example": {
+                  "title": "El nombre del evento es obligatorio."
+                }
+              },
+              "details": {
+                "$ref": "#/components/schemas/DailyCapacityConflictDetails"
+              }
+            }
           }
         }
       }

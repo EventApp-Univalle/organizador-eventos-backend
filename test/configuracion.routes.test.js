@@ -6,6 +6,7 @@ process.env.DOTENV_CONFIG_QUIET = 'true';
 process.env.SUPABASE_URL ||= 'https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY ||= 'test-secret';
 
+const EMPTY_IMPACT = { hasOverload: false, affectedDayCount: 0, affectedDays: [] };
 const USER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const scenario = {};
@@ -41,19 +42,25 @@ const supabaseMock = {
     let changes;
 
     function execute() {
+      if (table === 'subtasks') return { data: [], count: 0, error: null };
       if (operation === 'read') {
         return { data: currentProfile(), error: scenario.readError };
       }
       if (operation === 'update') {
         calls.updates.push({ table, changes, filters: [...filters] });
+        if (!scenario.updateError && scenario.profile) scenario.capacity = changes.daily_capacity_hours;
         return { data: currentProfile(), error: scenario.updateError };
       }
       calls.upserts.push({ table, changes, filters: [...filters] });
+      if (!scenario.upsertError && !scenario.profile) scenario.profile = { id: changes.id };
       return { data: currentProfile(), error: scenario.upsertError };
     }
 
     return {
       select() { return this; },
+      gte() { return this; },
+      order() { return this; },
+      range() { return this; },
       eq(column, value) {
         filters.push([column, value]);
         calls.filters.push([column, value]);
@@ -110,7 +117,7 @@ async function request(path, { method, body, auth = true } = {}) {
 test('GET devuelve el default cuando no está configurada', async () => {
   const { response, body } = await request('/api/configuracion/capacidad');
   assert.equal(response.status, 200);
-  assert.deepEqual(body, { dailyLimitHours: 6, defaultDailyLimitHours: 6, isDefault: true });
+  assert.deepEqual(body, { dailyLimitHours: 6, defaultDailyLimitHours: 6, isDefault: true, impact: EMPTY_IMPACT });
 });
 
 test('GET devuelve la capacidad configurada', async () => {
@@ -118,7 +125,7 @@ test('GET devuelve la capacidad configurada', async () => {
   scenario.capacity = 8;
   const { response, body } = await request('/api/configuracion/capacidad');
   assert.equal(response.status, 200);
-  assert.deepEqual(body, { dailyLimitHours: 8, defaultDailyLimitHours: 6, isDefault: false });
+  assert.deepEqual(body, { dailyLimitHours: 8, defaultDailyLimitHours: 6, isDefault: false, impact: EMPTY_IMPACT });
 });
 
 test('GET consulta solo el usuario autenticado', async () => {
@@ -140,7 +147,7 @@ test('PATCH guarda una capacidad válida y devuelve la configuración', async ()
     body: { dailyLimitHours: 8 },
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(body, { dailyLimitHours: 8, defaultDailyLimitHours: 6, isDefault: false });
+  assert.deepEqual(body, { dailyLimitHours: 8, defaultDailyLimitHours: 6, isDefault: false, impact: EMPTY_IMPACT });
   assert.equal(calls.updates.length, 1);
   assert.equal(calls.updates[0].changes.daily_capacity_hours, 8);
 });

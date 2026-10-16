@@ -1,5 +1,6 @@
 const supabase = require('./supabase');
 const { DAILY_CAPACITY, isValidUuid } = require('./validation');
+const { taskStatus } = require('./execution.utils');
 const { isCalendarDate } = require('./tareas.utils');
 
 const PAGE_SIZE = 500;
@@ -57,7 +58,7 @@ async function getDailyLoads(userId, fromDate, toDate, excludeSubtaskId, onTask)
   let offset = 0, expectedCount;
   while (true) {
     let query = supabase.from('subtasks').select(
-      `id,event_id,target_date,estimated_hours${onTask ? ',title' : ''},event:events!inner(owner_id)`, { count: 'exact' }
+      `id,event_id,target_date,estimated_hours${onTask ? ',title' : ''},status,event:events!inner(owner_id)`, { count: 'exact' }
     ).eq('event.owner_id', userId).gte('target_date', fromDate);
     if (toDate) query = query.lte('target_date', toDate);
     const { data, error, count } = await query.order('id', { ascending: true })
@@ -73,7 +74,7 @@ async function getDailyLoads(userId, fromDate, toDate, excludeSubtaskId, onTask)
         throw new Error('Datos de carga inconsistentes.');
       }
       seen.add(row.id);
-      if (row.id === excludeSubtaskId) continue;
+      if (row.id === excludeSubtaskId || taskStatus(row) === 'DONE') continue;
       const hours = decimal(row.estimated_hours);
       if (hours.units <= 0n || Number(row.estimated_hours) <= 0) throw new Error('Horas inconsistentes.');
       loads.set(row.target_date, add(loads.get(row.target_date) || ZERO, hours));

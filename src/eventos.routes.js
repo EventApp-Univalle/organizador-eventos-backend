@@ -9,6 +9,8 @@ const {
 const { ensureUserProfile } = require('./users.utils');
 const { getDailyLimit, sumDailyHours, assessDailyLoad, suggestCapacityAlternatives } = require('./capacity.utils');
 
+const { STATUSES, taskStatus, readAll, ownedProgress } = require('./execution.utils');
+
 const router = express.Router();
 const PAGE_SIZE = 500;
 
@@ -34,6 +36,9 @@ function mapSubtask(row) {
     targetDate: row.target_date,
     estimatedHours: Number(row.estimated_hours),
     createdAt: row.created_at,
+    status: taskStatus(row),
+    executionNote: row.execution_note ?? null,
+    executionUpdatedAt: row.execution_updated_at ?? null,
   };
 }
 
@@ -295,18 +300,53 @@ router.get('/:id/subtareas', async (req, res) => {
     return eventNotFoundResponse(res);
   }
 
-  const { data, error } = await supabase
-    .from('subtasks')
-    .select('*')
-    .eq('event_id', id)
-    .order('created_at', { ascending: true })
-    .order('id', { ascending: true });
+  try {
+    const data = await readAll(() => supabase.from('subtasks').select('*', { count: 'exact' }).eq('event_id', id));
+    data.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || a.id.localeCompare(b.id));
+    return res.status(200).json(data.map(mapSubtask));
+  } catch (error) { return internalErrorResponse(res, 'consultar las subtareas', error); }
+});
 
-  if (error) {
-    return internalErrorResponse(res, 'consultar las subtareas', error);
+router.get('/:id/progreso', async (req, res) => {
+  if (!isValidUuid(req.params.id)) return invalidEventIdResponse(res);
+  try {
+    const progress = await ownedProgress(req.user.id, req.params.id);
+    if (!progress) return eventNotFoundResponse(res);
+    return res.status(200).json(progress[0]);
+  } catch (error) { return internalErrorResponse(res, 'consultar el progreso', error); }
+});
+
+router.patch('/:id/subtareas/:subtaskId/ejecucion', async (req, res) => {
+  const event = await ownedCrudEvent(req, res);
+  if (!event) return;
+  const subtask = await ownedCrudSubtask(req, res);
+  if (!subtask) return;
+  const body = req.body;
+  const fields = Object.create(null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) fields.body = 'Envía un objeto JSON.';
+  else {
+    for (const key of Object.keys(body)) if (!['status', 'executionNote'].includes(key)) fields[key] = 'Campo no permitido.';
+    if (!STATUSES.includes(body.status)) fields.status = 'Selecciona Pendiente, Hecha o Pospuesta.';
+    if (Object.hasOwn(body, 'executionNote') && body.executionNote !== null &&
+        (typeof body.executionNote !== 'string' || body.executionNote.length > 2000)) fields.executionNote = 'La nota debe ser texto de hasta 2000 caracteres.';
   }
-
-  return res.status(200).json(data.map(mapSubtask));
+  if (Object.keys(fields).length) return validationResponse(res, fields);
+  // Returning DONE work to the plan consumes capacity again; POSTPONED remains planned.
+  if (taskStatus(subtask) === 'DONE' && body.status !== 'DONE') {
+    if (!await hasSubtaskCapacity(res, { userId: req.user.id, targetDate: subtask.target_date,
+      estimatedHours: Number(subtask.estimated_hours), excludeSubtaskId: subtask.id,
+      referenceDate: getBogotaDate(), eventDate: event.date, action: 'volver a planificar' })) return;
+  }
+  const changes = { status: body.status, execution_updated_at: new Date().toISOString() };
+  if (Object.hasOwn(body, 'executionNote')) changes.execution_note = body.executionNote?.trim() || null;
+  const { data, error } = await supabase.from('subtasks').update(changes)
+    .eq('id', subtask.id).eq('event_id', event.id).select('*').maybeSingle();
+  if (error) return internalErrorResponse(res, 'registrar la ejecución', error);
+  if (!data || data.id !== subtask.id || data.event_id !== event.id || data.status !== body.status ||
+      !data.execution_updated_at || (Object.hasOwn(changes, 'execution_note') && data.execution_note !== changes.execution_note)) {
+    return internalErrorResponse(res, 'confirmar la ejecución', new Error('No se confirmó la fila guardada.'));
+  }
+  return res.status(200).json(mapSubtask(data));
 });
 
 router.get('/:id', async (req, res) => {
@@ -438,7 +478,7 @@ router.patch('/:id/subtareas/:subtaskId', async (req, res) => {
     if (message) return validationResponse(res, { targetDate: message });
   }
 
-  if (value.targetDate !== undefined || value.estimatedHours !== undefined) {
+  if (taskStatus(subtask) !== 'DONE' && (value.targetDate !== undefined || value.estimatedHours !== undefined)) {
     const effectiveDate = value.targetDate ?? subtask.target_date;
     const effectiveHours = value.estimatedHours ?? Number(subtask.estimated_hours);
 

@@ -5,6 +5,7 @@ const { getBogotaDate, groupTasksByDate } = require('./tareas.utils');
 
 const router = express.Router();
 const PAGE_SIZE = 500;
+const { taskStatus } = require('./execution.utils');
 
 router.get('/hoy', async (req, res) => {
   const params = new URL(req.originalUrl, 'http://localhost').searchParams;
@@ -35,7 +36,7 @@ router.get('/hoy', async (req, res) => {
     // Paginate internally so all future dates are included, without silent truncation.
     while (true) {
       let query = supabase.from('subtasks').select(
-        'id,title,event_id,target_date,estimated_hours,event:events!inner(id,title,owner_id)',
+        'id,title,event_id,target_date,estimated_hours,status,execution_note,execution_updated_at,event:events!inner(id,title,owner_id)',
         { count: 'exact' }
       ).eq('event.owner_id', req.user.id).order('id', { ascending: true });
       if (eventId !== null) query = query.eq('event_id', eventId);
@@ -56,6 +57,7 @@ router.get('/hoy', async (req, res) => {
           id: row.id, title: row.title, eventId: row.event_id,
           eventTitle: row.event.title, targetDate: row.target_date,
           estimatedHours: Number(row.estimated_hours),
+          status: taskStatus(row), executionNote: row.execution_note ?? null, executionUpdatedAt: row.execution_updated_at ?? null,
         });
       }
       offset += data.length;
@@ -63,7 +65,13 @@ router.get('/hoy', async (req, res) => {
       if (data.length === 0) throw new Error('Listado de tareas incompleto.');
     }
 
-    return res.status(200).json(groupTasksByDate(tasks, referenceDate));
+    const ordered = list => {
+      const groups = groupTasksByDate(list, referenceDate);
+      return [...groups.overdue, ...groups.today, ...groups.upcoming];
+    };
+    return res.status(200).json({ ...groupTasksByDate(tasks.filter(task => task.status === 'PENDING'), referenceDate),
+      done: ordered(tasks.filter(task => task.status === 'DONE')),
+      postponed: ordered(tasks.filter(task => task.status === 'POSTPONED')) });
   } catch {
     return res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: 'No fue posible completar la operación.' },

@@ -29,13 +29,14 @@ app.use(
   '/api-docs',
   swaggerUi.serve,
   swaggerUi.setup(openapiDocument, {
-    customSiteTitle: 'EventApp API - Sprint 3',
+    customSiteTitle: 'EventApp API - Sprint 4',
   })
 );
 
 app.use('/api/eventos', authenticate, eventosRouter);
 app.use('/api/tareas', authenticate, tareasRouter);
 app.use('/api/configuracion', authenticate, configuracionRouter);
+app.use('/api/progreso', authenticate, require('./progreso.routes'));
 
 app.use((error, req, res, next) => {
   if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {

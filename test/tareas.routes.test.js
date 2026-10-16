@@ -119,7 +119,7 @@ test('solo obtiene subtareas propias, sin datos internos ni prioridad', async ()
   assert.equal(flat(result.body).some(t => t.eventId === FOREIGN), false);
   assert.ok(calls.every(c => c.filters['event.owner_id'] === A));
   for (const task of flat(result.body)) {
-    assert.deepEqual(Object.keys(task).sort(), ['estimatedHours', 'eventId', 'eventTitle', 'id', 'targetDate', 'title']);
+    assert.deepEqual(Object.keys(task).sort(), ['estimatedHours', 'eventId', 'eventTitle', 'executionNote', 'executionUpdatedAt', 'id', 'status', 'targetDate', 'title']);
     assert.equal(typeof task.estimatedHours, 'number');
     assert.ok(task.eventTitle.startsWith('Evento A'));
   }
@@ -127,7 +127,7 @@ test('solo obtiene subtareas propias, sin datos internos ni prioridad', async ()
 
 test('respuesta incluye referencia y clasificación correcta', async () => {
   const { body } = await request();
-  assert.deepEqual(Object.keys(body).sort(), ['overdue', 'referenceDate', 'today', 'upcoming']);
+  assert.deepEqual(Object.keys(body).sort(), ['done', 'overdue', 'postponed', 'referenceDate', 'today', 'upcoming']);
   assert.equal(body.referenceDate, referenceDate);
   assert.deepEqual(body.overdue.map(t => t.id), [id(1)]);
   assert.deepEqual(body.today.map(t => t.id), [id(2), id(3), id(4)]);
@@ -197,14 +197,14 @@ test('todos los filtros desconocidos se rechazan con 400', async () => {
 test('evento propio sin subtareas devuelve 200 con tres grupos vacíos', async () => {
   const result = await request(`?eventId=${EMPTY}`);
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body, { referenceDate, overdue: [], today: [], upcoming: [] });
+  assert.deepEqual(result.body, { referenceDate, overdue: [], today: [], upcoming: [], done: [], postponed: [] });
 });
 
 test('usuario sin eventos recibe tres grupos vacíos', async () => {
   events = [];
   const result = await request();
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body, { referenceDate, overdue: [], today: [], upcoming: [] });
+  assert.deepEqual(result.body, { referenceDate, overdue: [], today: [], upcoming: [], done: [], postponed: [] });
 });
 
 test('errores consultando eventos o subtareas devuelven 500 controlado', async () => {

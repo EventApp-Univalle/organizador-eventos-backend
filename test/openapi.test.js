@@ -38,8 +38,11 @@ test('openapi.json es JSON válido y documenta todas las rutas', () => {
     '/api/configuracion/capacidad',
     '/api/eventos',
     '/api/eventos/{id}',
+    '/api/eventos/{id}/progreso',
     '/api/eventos/{id}/subtareas',
     '/api/eventos/{id}/subtareas/{subtaskId}',
+    '/api/eventos/{id}/subtareas/{subtaskId}/ejecucion',
+    '/api/progreso',
     '/api/tareas/hoy',
     '/health',
   ]);
@@ -59,7 +62,7 @@ test('Swagger UI responde en /api-docs', async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /text\/html/);
   assert.match(html, /id="swagger-ui"/);
-  assert.match(html, /EventApp API - Sprint 3/);
+  assert.match(html, /EventApp API - Sprint 4/);
 });
 
 test('OpenAPI define Bearer JWT y protege todas las operaciones privadas', () => {
@@ -99,13 +102,13 @@ test('Hoy documenta únicamente eventId y los cinco estados HTTP aprobados', () 
   assert.equal(hoy.parameters[0].schema.format, 'uuid');
   assert.deepEqual(Object.keys(hoy.responses).sort(), ['200', '400', '401', '404', '500']);
   const response = document.components.schemas.TodayResponse;
-  assert.deepEqual(response.required, ['referenceDate', 'overdue', 'today', 'upcoming']);
+  assert.deepEqual(response.required, ['referenceDate', 'overdue', 'today', 'upcoming', 'done', 'postponed']);
   for (const group of ['overdue', 'today', 'upcoming']) {
     assert.equal(response.properties[group].type, 'array');
     assert.equal(response.properties[group].items.$ref, '#/components/schemas/TodayTask');
   }
   assert.deepEqual(document.components.schemas.TodayTask.required,
-    ['id', 'title', 'eventId', 'eventTitle', 'targetDate', 'estimatedHours']);
+    ['id', 'title', 'eventId', 'eventTitle', 'targetDate', 'estimatedHours', 'status', 'executionNote', 'executionUpdatedAt']);
 });
 
 test('ejemplos de autenticación coinciden con respuestas del middleware', async () => {
@@ -226,4 +229,18 @@ test('ejemplos GET y PATCH de capacidad contienen impactos completos y coherente
       }
     }
   }
+});
+
+test('Sprint 4 documenta ejecución separada, nota, progreso y estados de Hoy', () => {
+  const schemas = document.components.schemas;
+  assert.deepEqual(schemas.SubtaskExecution.properties.status.enum, ['PENDING', 'DONE', 'POSTPONED']);
+  assert.equal(schemas.SubtaskExecution.properties.executionNote.maxLength, 2000);
+  assert.deepEqual(schemas.SubtaskExecution.required, ['status']);
+  const execution = document.paths['/api/eventos/{id}/subtareas/{subtaskId}/ejecucion'].patch;
+  assert.deepEqual(Object.keys(execution.responses).sort(), ['200', '400', '401', '404', '409', '500']);
+  assert.equal(execution.responses['200'].content['application/json'].example.status, 'DONE');
+  for (const key of ['status', 'executionNote', 'executionUpdatedAt']) assert.ok(schemas.Subtask.required.includes(key));
+  assert.deepEqual(schemas.EventProgress.required, ['eventId', 'eventTitle', 'doneCount', 'totalCount', 'progressPercent']);
+  assert.equal(document.paths['/api/progreso'].get.responses['200'].content['application/json'].schema.items.$ref, '#/components/schemas/EventProgress');
+  assert.match(document.paths['/api/tareas/hoy'].get.description, /solo PENDING/);
 });

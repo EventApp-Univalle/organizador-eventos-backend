@@ -87,7 +87,8 @@ const supabaseMock = {
           return Promise.resolve({ data: rows.slice(start, end + 1), count: rows.length, error: scenario.listError }).then(resolve, reject);
         }
         return Promise.resolve({
-          data: scenario.subtasks,
+          data: scenario.subtasks.slice(start, end + 1),
+          count: scenario.subtasks.length,
           error: scenario.listError,
         }).then(resolve, reject);
       },
@@ -233,6 +234,7 @@ test('POST persiste y devuelve la subtarea mapeada con 201', async () => {
     targetDate: '2026-10-10',
     estimatedHours: 1.5,
     createdAt: '2026-09-26T05:00:00.000Z',
+    status: 'PENDING', executionNote: null, executionUpdatedAt: null,
   });
 });
 
@@ -244,11 +246,6 @@ test('GET devuelve 200 y [] cuando el evento existe sin subtareas', async () => 
   assert.equal(response.status, 200);
   assert.deepEqual(body, []);
   assert.deepEqual(calls.orders, [
-    {
-      table: 'subtasks',
-      column: 'created_at',
-      options: { ascending: true },
-    },
     {
       table: 'subtasks',
       column: 'id',
@@ -273,6 +270,7 @@ test('GET devuelve subtareas mapeadas', async () => {
       targetDate: '2026-10-10',
       estimatedHours: 1.5,
       createdAt: '2026-09-26T05:00:00.000Z',
+    status: 'PENDING', executionNote: null, executionUpdatedAt: null,
     },
   ]);
 });

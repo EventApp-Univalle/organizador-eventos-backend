@@ -130,7 +130,7 @@ test('cambio de fecha Bogotá excluye el día que pasa a histórico',async()=>{
   await patch(4);clock.mock.mockImplementation(()=>'2026-10-16');
   const result=await request();assert.deepEqual(result.body.impact.affectedDays.map(day=>day.date),['2026-10-16']);
 });
-test('semántica incluye todas las subtareas: no hay filtro por estado ni prioridad',async()=>{
+test('subtareas pendientes conservan la suma sin filtro por prioridad',async()=>{
   await patch(4);
   assert.ok(queries.filter(q=>q.table==='subtasks').every(q=>q.filters.length===1&&q.filters[0][0]==='event.owner_id'));
 });

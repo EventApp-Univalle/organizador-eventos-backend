@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "EventApp API - Sprint 3",
-    "version": "3.0.0",
+    "title": "EventApp API - Sprint 4",
+    "version": "4.0.0",
     "description": "API REST de EventApp: eventos, subtareas, vista Hoy y configuración de capacidad diaria. Las rutas privadas usan Supabase Auth y aíslan datos por usuario."
   },
   "servers": [
@@ -31,6 +31,10 @@
     {
       "name": "Configuración",
       "description": "Capacidad diaria del organizador"
+    },
+    {
+      "name": "Progreso",
+      "description": "Avance logístico por conteo de gestiones Hechas."
     }
   ],
   "paths": {
@@ -67,7 +71,7 @@
         ],
         "summary": "Consultar las subtareas del organizador por fecha",
         "operationId": "getTodayTasks",
-        "description": "Solo devuelve subtareas de eventos del usuario autenticado. referenceDate se calcula una vez por petición en America/Bogota. overdue contiene targetDate anterior a referenceDate; today, igual; upcoming, posterior, sin ventana fija. Cada grupo se ordena por targetDate ASC, estimatedHours ASC e id ASC. Se incluyen todas las tareas, con paginación interna. Solo se admite eventId una vez; parámetros desconocidos se rechazan.",
+        "description": "Solo devuelve subtareas de eventos del usuario autenticado. referenceDate se calcula una vez por petición en America/Bogota. overdue contiene targetDate anterior a referenceDate; today, igual; upcoming, posterior, sin ventana fija. Cada grupo se ordena por targetDate ASC, estimatedHours ASC e id ASC. Se incluyen todas las tareas, con paginación interna. Solo se admite eventId una vez; parámetros desconocidos se rechazan. Sprint 4: overdue/today/upcoming contienen solo PENDING. done y postponed contienen DONE y POSTPONED respectivamente, ordenadas por fecha, esfuerzo e ID, fuera de urgencias; conservan filtros de evento y aislamiento.",
         "security": [
           {
             "BearerAuth": []
@@ -106,7 +110,10 @@
                           "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
                           "eventTitle": "Encuentro cultural",
                           "targetDate": "2026-10-01",
-                          "estimatedHours": 2
+                          "estimatedHours": 2,
+                          "status": "PENDING",
+                          "executionNote": null,
+                          "executionUpdatedAt": null
                         }
                       ],
                       "today": [
@@ -116,7 +123,10 @@
                           "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
                           "eventTitle": "Encuentro cultural",
                           "targetDate": "2026-10-02",
-                          "estimatedHours": 1
+                          "estimatedHours": 1,
+                          "status": "PENDING",
+                          "executionNote": null,
+                          "executionUpdatedAt": null
                         },
                         {
                           "id": "00000000-0000-4000-8000-000000000003",
@@ -124,7 +134,10 @@
                           "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
                           "eventTitle": "Encuentro cultural",
                           "targetDate": "2026-10-02",
-                          "estimatedHours": 3
+                          "estimatedHours": 3,
+                          "status": "PENDING",
+                          "executionNote": null,
+                          "executionUpdatedAt": null
                         }
                       ],
                       "upcoming": [
@@ -134,9 +147,14 @@
                           "eventId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
                           "eventTitle": "Encuentro cultural",
                           "targetDate": "2026-10-03",
-                          "estimatedHours": 1.5
+                          "estimatedHours": 1.5,
+                          "status": "PENDING",
+                          "executionNote": null,
+                          "executionUpdatedAt": null
                         }
-                      ]
+                      ],
+                      "done": [],
+                      "postponed": []
                     }
                   },
                   "empty": {
@@ -145,7 +163,9 @@
                       "referenceDate": "2026-10-02",
                       "overdue": [],
                       "today": [],
-                      "upcoming": []
+                      "upcoming": [],
+                      "done": [],
+                      "postponed": []
                     }
                   }
                 }
@@ -187,7 +207,7 @@
         ],
         "summary": "Editar parcialmente subtarea",
         "operationId": "updateSubtask",
-        "description": "Solo recursos del usuario autenticado. Solo campos enviados; body no vacío. Si targetDate cambia, hoy Bogotá <= targetDate <= fecha del evento. Si se mantiene la fecha histórica, permite editar título/esfuerzo. Si la carga excede el límite, rechaza todos los cambios con 409 y propone alternativas calculadas, sin reservar capacidad ni guardar automáticamente. Un fallo de lectura o listado incompleto devuelve 500. La verificación y escritura no son una transacción atómica; otra petición concurrente puede modificar la carga.",
+        "description": "Solo recursos del usuario autenticado. Solo campos enviados; body no vacío. Si targetDate cambia, hoy Bogotá <= targetDate <= fecha del evento. Si se mantiene la fecha histórica, permite editar título/esfuerzo. Si la carga excede el límite, rechaza todos los cambios con 409 y propone alternativas calculadas, sin reservar capacidad ni guardar automáticamente. Un fallo de lectura o listado incompleto devuelve 500. La verificación y escritura no son una transacción atómica; otra petición concurrente puede modificar la carga. Sprint 4: las tareas DONE no consumen capacidad pendiente; POSTPONED conserva su carga en la fecha objetivo. Editar la planificación de una DONE conserva su estado y no añade capacidad pendiente; reactivarla usa el endpoint de ejecución y revalida capacidad.",
         "security": [
           {
             "BearerAuth": []
@@ -235,7 +255,10 @@
                   "title": "Título actualizado",
                   "targetDate": "2026-10-10",
                   "estimatedHours": 1.5,
-                  "createdAt": "2026-09-26T15:25:00.000Z"
+                  "createdAt": "2026-09-26T15:25:00.000Z",
+                  "status": "PENDING",
+                  "executionNote": null,
+                  "executionUpdatedAt": null
                 }
               }
             }
@@ -819,7 +842,7 @@
           "Subtareas"
         ],
         "summary": "Crear una subtarea",
-        "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL. Para nuevas subtareas: fecha actual en America/Bogota <= targetDate <= fecha del evento, con límites inclusivos. No se pueden crear subtareas para eventos pasados; el historial existente se conserva. Antes del INSERT comprueba la carga propia de todos los eventos en esa fecha con la capacidad personalizada o predeterminada. La igualdad con el límite se permite. Si supera el límite, responde 409 sin crear la subtarea y propone las mismas alternativas que PATCH. Un fallo de consulta o carga incompleta devuelve 500 sin insertar. Las sugerencias no reservan capacidad; todo reintento revalida. La comprobación y escritura no son una transacción atómica.",
+        "description": "Crea una subtarea para un evento existente del usuario autenticado. El identificador del evento se toma de la URL. Para nuevas subtareas: fecha actual en America/Bogota <= targetDate <= fecha del evento, con límites inclusivos. No se pueden crear subtareas para eventos pasados; el historial existente se conserva. Antes del INSERT comprueba la carga propia de todos los eventos en esa fecha con la capacidad personalizada o predeterminada. La igualdad con el límite se permite. Si supera el límite, responde 409 sin crear la subtarea y propone las mismas alternativas que PATCH. Un fallo de consulta o carga incompleta devuelve 500 sin insertar. Las sugerencias no reservan capacidad; todo reintento revalida. La comprobación y escritura no son una transacción atómica. Sprint 4: las tareas DONE no consumen capacidad pendiente; POSTPONED conserva su carga en la fecha objetivo. Editar la planificación de una DONE conserva su estado y no añade capacidad pendiente; reactivarla usa el endpoint de ejecución y revalida capacidad.",
         "operationId": "createSubtask",
         "security": [
           {
@@ -860,7 +883,10 @@
                   "title": "Confirmar sonido",
                   "targetDate": "2026-10-10",
                   "estimatedHours": 1.5,
-                  "createdAt": "2026-09-26T15:25:00.000Z"
+                  "createdAt": "2026-09-26T15:25:00.000Z",
+                  "status": "PENDING",
+                  "executionNote": null,
+                  "executionUpdatedAt": null
                 }
               }
             }
@@ -1047,7 +1073,10 @@
                         "title": "Confirmar sonido",
                         "targetDate": "2026-10-10",
                         "estimatedHours": 1.5,
-                        "createdAt": "2026-09-26T15:25:00.000Z"
+                        "createdAt": "2026-09-26T15:25:00.000Z",
+                        "status": "PENDING",
+                        "executionNote": null,
+                        "executionUpdatedAt": null
                       }
                     ]
                   },
@@ -1081,7 +1110,7 @@
         ],
         "summary": "Consultar el límite diario de capacidad",
         "operationId": "getDailyCapacity",
-        "description": "Devuelve la capacidad efectiva y recalcula impact desde la planificación existente en cada consulta; la advertencia no se almacena por separado. Sin configuración se aplica 6 h con isDefault true. Un fallo de consulta o datos inconsistentes devuelve 500 INTERNAL_ERROR, nunca un impacto vacío o parcial presentado como válido. El impacto incluye todas las subtareas de todos los eventos propios con fecha objetivo igual o posterior al día actual en America/Bogota. Las fechas se tratan como calendario; las sobrecargas históricas no se incluyen ni se modifican. No se excluyen tareas por estado o prioridad. Se leen todas las páginas con control de integridad, sin consultas por tarea (sin N+1), y se calculan sumas decimales sin redondear los excesos a dos decimales. La respuesta incluye el detalle completo, de tamaño proporcional a las tareas afectadas: no hay paginación pública ni truncamiento. El análisis es una instantánea, no una reserva de capacidad ni una operación transaccional con las subtareas.",
+        "description": "Devuelve la capacidad efectiva y recalcula impact desde la planificación existente en cada consulta; la advertencia no se almacena por separado. Sin configuración se aplica 6 h con isDefault true. Un fallo de consulta o datos inconsistentes devuelve 500 INTERNAL_ERROR, nunca un impacto vacío o parcial presentado como válido. El impacto incluye todas las subtareas de todos los eventos propios con fecha objetivo igual o posterior al día actual en America/Bogota. Las fechas se tratan como calendario; las sobrecargas históricas no se incluyen ni se modifican. La prioridad no interviene en el cálculo. Se leen todas las páginas con control de integridad, sin consultas por tarea (sin N+1), y se calculan sumas decimales sin redondear los excesos a dos decimales. La respuesta incluye el detalle completo, de tamaño proporcional a las tareas afectadas: no hay paginación pública ni truncamiento. El análisis es una instantánea, no una reserva de capacidad ni una operación transaccional con las subtareas. Sprint 4 sustituye la semántica anterior sin estados: se excluyen DONE; PENDING y POSTPONED mantienen su carga.",
         "security": [
           {
             "BearerAuth": []
@@ -1194,7 +1223,7 @@
         ],
         "summary": "Establecer el límite diario de capacidad",
         "operationId": "patchDailyCapacity",
-        "description": "Guardar y advertir: dailyLimitHours debe ser un número entre 1 y 24 y se redondea a dos decimales según la validación existente. El límite se guarda incluso si hay sobrecargas; no se modifican subtareas y no se devuelve 409 por carga previa. Primero se lee y valida la planificación completa: si este análisis falla, se responde 500 INTERNAL_ERROR sin actualizar la capacidad. El 200 solo se emite tras confirmar la fila devuelta por Supabase; dailyLimitHours e impact usan el límite confirmado, sin fallback al valor enviado. Un fallo de persistencia o la ausencia de fila confirmada devuelve 500 sin afirmar éxito; si el UPDATE llegó a aplicarse pero su confirmación falló, el resultado es incierto y debe verificarse mediante GET antes de reintentar. No se promete rollback. El impacto incluye todas las subtareas de todos los eventos propios con fecha objetivo igual o posterior al día actual en America/Bogota. Las fechas se tratan como calendario; las sobrecargas históricas no se incluyen ni se modifican. No se excluyen tareas por estado o prioridad. Se leen todas las páginas con control de integridad, sin consultas por tarea (sin N+1), y se calculan sumas decimales sin redondear los excesos a dos decimales. La respuesta incluye el detalle completo, de tamaño proporcional a las tareas afectadas: no hay paginación pública ni truncamiento. El análisis es una instantánea, no una reserva de capacidad ni una operación transaccional con las subtareas.",
+        "description": "Guardar y advertir: dailyLimitHours debe ser un número entre 1 y 24 y se redondea a dos decimales según la validación existente. El límite se guarda incluso si hay sobrecargas; no se modifican subtareas y no se devuelve 409 por carga previa. Primero se lee y valida la planificación completa: si este análisis falla, se responde 500 INTERNAL_ERROR sin actualizar la capacidad. El 200 solo se emite tras confirmar la fila devuelta por Supabase; dailyLimitHours e impact usan el límite confirmado, sin fallback al valor enviado. Un fallo de persistencia o la ausencia de fila confirmada devuelve 500 sin afirmar éxito; si el UPDATE llegó a aplicarse pero su confirmación falló, el resultado es incierto y debe verificarse mediante GET antes de reintentar. No se promete rollback. El impacto incluye todas las subtareas de todos los eventos propios con fecha objetivo igual o posterior al día actual en America/Bogota. Las fechas se tratan como calendario; las sobrecargas históricas no se incluyen ni se modifican. La prioridad no interviene en el cálculo. Se leen todas las páginas con control de integridad, sin consultas por tarea (sin N+1), y se calculan sumas decimales sin redondear los excesos a dos decimales. La respuesta incluye el detalle completo, de tamaño proporcional a las tareas afectadas: no hay paginación pública ni truncamiento. El análisis es una instantánea, no una reserva de capacidad ni una operación transaccional con las subtareas. Sprint 4 sustituye la semántica anterior sin estados: se excluyen DONE; PENDING y POSTPONED mantienen su carga.",
         "security": [
           {
             "BearerAuth": []
@@ -1304,6 +1333,276 @@
           }
         }
       }
+    },
+    "/api/eventos/{id}/progreso": {
+      "get": {
+        "tags": [
+          "Progreso"
+        ],
+        "summary": "Consultar avance por evento",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          }
+        ],
+        "description": "Conteo persistido de todas las subtareas: DONE / total * 100. POSTPONED no es completada. Evento vacío: 0 %. Solo propietario autenticado; paginación completa.",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "404": {
+            "$ref": "#/components/responses/EventNotFound"
+          },
+          "200": {
+            "description": "Progreso calculado; sin ponderar por horas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventProgress"
+                },
+                "example": {
+                  "eventId": "00000000-0000-4000-8000-000000000001",
+                  "eventTitle": "Encuentro cultural",
+                  "doneCount": 2,
+                  "totalCount": 4,
+                  "progressPercent": 50
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/progreso": {
+      "get": {
+        "tags": [
+          "Progreso"
+        ],
+        "summary": "Consultar progreso de todos los eventos propios",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Incluye eventos sin subtareas. Lee eventos y subtareas propios en páginas completas, sin N+1. No admite query; conteos calculados desde estados persistidos.",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "200": {
+            "description": "Progreso calculado; sin ponderar por horas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventProgress"
+                  }
+                },
+                "examples": {
+                  "events": {
+                    "value": [
+                      {
+                        "eventId": "00000000-0000-4000-8000-000000000001",
+                        "eventTitle": "Encuentro cultural",
+                        "doneCount": 2,
+                        "totalCount": 4,
+                        "progressPercent": 50
+                      }
+                    ]
+                  },
+                  "empty": {
+                    "value": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/eventos/{id}/subtareas/{subtaskId}/ejecucion": {
+      "patch": {
+        "tags": [
+          "Subtareas"
+        ],
+        "summary": "Registrar estado y nota de ejecución",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventId"
+          },
+          {
+            "name": "subtaskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "Actualiza únicamente status, nota opcional y executionUpdatedAt, en un solo UPDATE. No modifica fecha, título ni horas. Nota omitida conserva su valor; null o texto vacío la limpia. PENDING y POSTPONED consumen capacidad en su fecha; DONE no. Reactivar DONE revalida capacidad y puede responder 409 sin guardar cambios. No crea historial completo. 200 solo con fila confirmada; ante 500 la persistencia puede ser incierta y debe releerse antes de reintentar. Recursos ajenos devuelven 404.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubtaskExecution"
+              },
+              "example": {
+                "status": "DONE",
+                "executionNote": "Sonido confirmado con proveedor."
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "404": {
+            "description": "Evento no disponible o subtarea no encontrada dentro del evento propio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "event": {
+                    "value": {
+                      "error": {
+                        "code": "EVENT_NOT_FOUND",
+                        "message": "Evento no encontrado."
+                      }
+                    }
+                  },
+                  "subtask": {
+                    "value": {
+                      "error": {
+                        "code": "SUBTASK_NOT_FOUND",
+                        "message": "Subtarea no encontrada."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sobrecarga diaria: PATCH rechazado sin persistir cambios. Alternativas calculadas con datos del usuario autenticado y plazo del evento; sin ventana fija de días. La propuesta puede quedar obsoleta y un reintento vuelve a calcular.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyCapacityConflictResponse"
+                },
+                "examples": {
+                  "withSuggestions": {
+                    "summary": "Hoy 2026-10-14, plazo 2026-10-18, 5 h ocupadas y 2 h solicitadas.",
+                    "value": {
+                      "error": {
+                        "code": "DAILY_CAPACITY_EXCEEDED",
+                        "message": "Al reprogramar, la fecha tendría 7 h, superando tu límite diario de 6 h.",
+                        "details": {
+                          "targetDate": "2026-10-15",
+                          "totalHours": 7,
+                          "limitHours": 6,
+                          "suggestions": [
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-14",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-16",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "CHANGE_DATE",
+                              "targetDate": "2026-10-17",
+                              "estimatedHours": 2
+                            },
+                            {
+                              "strategy": "ADJUST_HOURS",
+                              "targetDate": "2026-10-15",
+                              "estimatedHours": 1
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "noSuggestions": {
+                    "summary": "Todos los días hasta el plazo están llenos.",
+                    "value": {
+                      "error": {
+                        "code": "DAILY_CAPACITY_EXCEEDED",
+                        "message": "Al reprogramar, la fecha tendría 8 h, superando tu límite diario de 6 h.",
+                        "details": {
+                          "targetDate": "2026-10-15",
+                          "totalHours": 8,
+                          "limitHours": 6,
+                          "suggestions": [],
+                          "noSuggestionsReason": "No se encontraron fechas ni horas disponibles dentro del plazo del evento."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Subtarea con ejecución confirmada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Subtask"
+                },
+                "example": {
+                  "id": "00000000-0000-4000-8000-000000000011",
+                  "eventId": "00000000-0000-4000-8000-000000000001",
+                  "title": "Confirmar sonido",
+                  "targetDate": "2026-10-15",
+                  "estimatedHours": 2,
+                  "createdAt": "2026-10-10T15:00:00Z",
+                  "status": "DONE",
+                  "executionNote": "Sonido confirmado con proveedor.",
+                  "executionUpdatedAt": "2026-10-15T18:30:00Z"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1338,7 +1637,10 @@
           "eventId",
           "eventTitle",
           "targetDate",
-          "estimatedHours"
+          "estimatedHours",
+          "status",
+          "executionNote",
+          "executionUpdatedAt"
         ],
         "properties": {
           "id": {
@@ -1364,6 +1666,27 @@
             "type": "number",
             "minimum": 0,
             "exclusiveMinimum": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "DONE",
+              "POSTPONED"
+            ],
+            "example": "PENDING"
+          },
+          "executionNote": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000,
+            "example": "Proveedor confirmó el montaje."
+          },
+          "executionUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-10-15T18:30:00.000Z"
           }
         }
       },
@@ -1374,7 +1697,9 @@
           "referenceDate",
           "overdue",
           "today",
-          "upcoming"
+          "upcoming",
+          "done",
+          "postponed"
         ],
         "properties": {
           "referenceDate": {
@@ -1399,6 +1724,18 @@
           "upcoming": {
             "type": "array",
             "description": "targetDate posterior a referenceDate, sin límite de días.",
+            "items": {
+              "$ref": "#/components/schemas/TodayTask"
+            }
+          },
+          "done": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TodayTask"
+            }
+          },
+          "postponed": {
+            "type": "array",
             "items": {
               "$ref": "#/components/schemas/TodayTask"
             }
@@ -1567,7 +1904,10 @@
           "title",
           "targetDate",
           "estimatedHours",
-          "createdAt"
+          "createdAt",
+          "status",
+          "executionNote",
+          "executionUpdatedAt"
         ],
         "properties": {
           "id": {
@@ -1593,6 +1933,27 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "DONE",
+              "POSTPONED"
+            ],
+            "example": "PENDING"
+          },
+          "executionNote": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000,
+            "example": "Proveedor confirmó el montaje."
+          },
+          "executionUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-10-15T18:30:00.000Z"
           }
         }
       },
@@ -1967,7 +2328,7 @@
           "affectedDayCount",
           "affectedDays"
         ],
-        "description": "Solo fechas con carga estrictamente superior al límite. Fechas actuales y futuras según America/Bogota; el historial se conserva y se excluye del aviso. No existen excepciones por estado de subtarea.",
+        "description": "Solo fechas con carga estrictamente superior al límite. Fechas actuales y futuras según America/Bogota; el historial se conserva y se excluye del aviso.  Sprint 4: DONE no consume capacidad pendiente; POSTPONED sí consume en su fecha hasta reprogramarse.",
         "properties": {
           "hasOverload": {
             "type": "boolean"
@@ -1982,6 +2343,63 @@
               "$ref": "#/components/schemas/CapacityAffectedDay"
             },
             "description": "Lista completa de días afectados en orden ascendente, sin recorte silencioso. affectedDayCount coincide con su longitud."
+          }
+        }
+      },
+      "SubtaskExecution": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "DONE",
+              "POSTPONED"
+            ],
+            "example": "PENDING"
+          },
+          "executionNote": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000,
+            "example": "Proveedor confirmó el montaje."
+          }
+        }
+      },
+      "EventProgress": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "eventId",
+          "eventTitle",
+          "doneCount",
+          "totalCount",
+          "progressPercent"
+        ],
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventTitle": {
+            "type": "string"
+          },
+          "doneCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "progressPercent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
           }
         }
       }

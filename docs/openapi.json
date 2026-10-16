@@ -1081,7 +1081,7 @@
         ],
         "summary": "Consultar el límite diario de capacidad",
         "operationId": "getDailyCapacity",
-        "description": "Devuelve el límite diario efectivo del organizador autenticado. Si nunca se configuró, devuelve el default 6 con isDefault true.",
+        "description": "Devuelve la capacidad efectiva y recalcula impact desde la planificación existente en cada consulta; la advertencia no se almacena por separado. Sin configuración se aplica 6 h con isDefault true. Un fallo de consulta o datos inconsistentes devuelve 500 INTERNAL_ERROR, nunca un impacto vacío o parcial presentado como válido. El impacto incluye todas las subtareas de todos los eventos propios con fecha objetivo igual o posterior al día actual en America/Bogota. Las fechas se tratan como calendario; las sobrecargas históricas no se incluyen ni se modifican. No se excluyen tareas por estado o prioridad. Se leen todas las páginas con control de integridad, sin consultas por tarea (sin N+1), y se calculan sumas decimales sin redondear los excesos a dos decimales. La respuesta incluye el detalle completo, de tamaño proporcional a las tareas afectadas: no hay paginación pública ni truncamiento. El análisis es una instantánea, no una reserva de capacidad ni una operación transaccional con las subtareas.",
         "security": [
           {
             "BearerAuth": []
@@ -1101,7 +1101,12 @@
                     "value": {
                       "dailyLimitHours": 8,
                       "defaultDailyLimitHours": 6,
-                      "isDefault": false
+                      "isDefault": false,
+                      "impact": {
+                        "hasOverload": false,
+                        "affectedDayCount": 0,
+                        "affectedDays": []
+                      }
                     }
                   },
                   "default": {
@@ -1109,7 +1114,66 @@
                     "value": {
                       "dailyLimitHours": 6,
                       "defaultDailyLimitHours": 6,
-                      "isDefault": true
+                      "isDefault": true,
+                      "impact": {
+                        "hasOverload": false,
+                        "affectedDayCount": 0,
+                        "affectedDays": []
+                      }
+                    }
+                  },
+                  "overloaded": {
+                    "summary": "Advertencia recalculada: dos días afectados, tareas de dos eventos propios",
+                    "value": {
+                      "dailyLimitHours": 4,
+                      "defaultDailyLimitHours": 6,
+                      "isDefault": false,
+                      "impact": {
+                        "hasOverload": true,
+                        "affectedDayCount": 2,
+                        "affectedDays": [
+                          {
+                            "date": "2026-10-15",
+                            "plannedHours": 5,
+                            "limitHours": 4,
+                            "excessHours": 1,
+                            "tasks": [
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000011",
+                                "eventId": "00000000-0000-4000-8000-000000000001",
+                                "title": "Confirmar sonido",
+                                "estimatedHours": 2
+                              },
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000012",
+                                "eventId": "00000000-0000-4000-8000-000000000002",
+                                "title": "Preparar materiales",
+                                "estimatedHours": 3
+                              }
+                            ]
+                          },
+                          {
+                            "date": "2026-10-16",
+                            "plannedHours": 5.5,
+                            "limitHours": 4,
+                            "excessHours": 1.5,
+                            "tasks": [
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000013",
+                                "eventId": "00000000-0000-4000-8000-000000000001",
+                                "title": "Coordinar transporte",
+                                "estimatedHours": 2.5
+                              },
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000014",
+                                "eventId": "00000000-0000-4000-8000-000000000002",
+                                "title": "Revisar montaje",
+                                "estimatedHours": 3
+                              }
+                            ]
+                          }
+                        ]
+                      }
                     }
                   }
                 }
@@ -1130,7 +1194,7 @@
         ],
         "summary": "Establecer el límite diario de capacidad",
         "operationId": "patchDailyCapacity",
-        "description": "Actualiza el límite diario de horas del organizador autenticado. dailyLimitHours debe ser un número entre 1 y 24.",
+        "description": "Guardar y advertir: dailyLimitHours debe ser un número entre 1 y 24 y se redondea a dos decimales según la validación existente. El límite se guarda incluso si hay sobrecargas; no se modifican subtareas y no se devuelve 409 por carga previa. Primero se lee y valida la planificación completa: si este análisis falla, se responde 500 INTERNAL_ERROR sin actualizar la capacidad. El 200 solo se emite tras confirmar la fila devuelta por Supabase; dailyLimitHours e impact usan el límite confirmado, sin fallback al valor enviado. Un fallo de persistencia o la ausencia de fila confirmada devuelve 500 sin afirmar éxito; si el UPDATE llegó a aplicarse pero su confirmación falló, el resultado es incierto y debe verificarse mediante GET antes de reintentar. No se promete rollback. El impacto incluye todas las subtareas de todos los eventos propios con fecha objetivo igual o posterior al día actual en America/Bogota. Las fechas se tratan como calendario; las sobrecargas históricas no se incluyen ni se modifican. No se excluyen tareas por estado o prioridad. Se leen todas las páginas con control de integridad, sin consultas por tarea (sin N+1), y se calculan sumas decimales sin redondear los excesos a dos decimales. La respuesta incluye el detalle completo, de tamaño proporcional a las tareas afectadas: no hay paginación pública ni truncamiento. El análisis es una instantánea, no una reserva de capacidad ni una operación transaccional con las subtareas.",
         "security": [
           {
             "BearerAuth": []
@@ -1151,16 +1215,80 @@
         },
         "responses": {
           "200": {
-            "description": "Capacidad actualizada.",
+            "description": "Capacidad confirmada y guardada; impact advierte sin bloquear ni modificar subtareas.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CapacityConfig"
                 },
-                "example": {
-                  "dailyLimitHours": 8,
-                  "defaultDailyLimitHours": 6,
-                  "isDefault": false
+                "examples": {
+                  "noOverload": {
+                    "summary": "Capacidad guardada sin sobrecargas",
+                    "value": {
+                      "dailyLimitHours": 8,
+                      "defaultDailyLimitHours": 6,
+                      "isDefault": false,
+                      "impact": {
+                        "hasOverload": false,
+                        "affectedDayCount": 0,
+                        "affectedDays": []
+                      }
+                    }
+                  },
+                  "overloaded": {
+                    "summary": "Límite guardado en 4 h; dos días requieren revisión",
+                    "value": {
+                      "dailyLimitHours": 4,
+                      "defaultDailyLimitHours": 6,
+                      "isDefault": false,
+                      "impact": {
+                        "hasOverload": true,
+                        "affectedDayCount": 2,
+                        "affectedDays": [
+                          {
+                            "date": "2026-10-15",
+                            "plannedHours": 5,
+                            "limitHours": 4,
+                            "excessHours": 1,
+                            "tasks": [
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000011",
+                                "eventId": "00000000-0000-4000-8000-000000000001",
+                                "title": "Confirmar sonido",
+                                "estimatedHours": 2
+                              },
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000012",
+                                "eventId": "00000000-0000-4000-8000-000000000002",
+                                "title": "Preparar materiales",
+                                "estimatedHours": 3
+                              }
+                            ]
+                          },
+                          {
+                            "date": "2026-10-16",
+                            "plannedHours": 5.5,
+                            "limitHours": 4,
+                            "excessHours": 1.5,
+                            "tasks": [
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000013",
+                                "eventId": "00000000-0000-4000-8000-000000000001",
+                                "title": "Coordinar transporte",
+                                "estimatedHours": 2.5
+                              },
+                              {
+                                "subtaskId": "00000000-0000-4000-8000-000000000014",
+                                "eventId": "00000000-0000-4000-8000-000000000002",
+                                "title": "Revisar montaje",
+                                "estimatedHours": 3
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -1617,7 +1745,8 @@
         "required": [
           "dailyLimitHours",
           "defaultDailyLimitHours",
-          "isDefault"
+          "isDefault",
+          "impact"
         ],
         "properties": {
           "dailyLimitHours": {
@@ -1633,6 +1762,9 @@
           "isDefault": {
             "type": "boolean",
             "example": false
+          },
+          "impact": {
+            "$ref": "#/components/schemas/CapacityImpact"
           }
         }
       },
@@ -1755,6 +1887,101 @@
                 "$ref": "#/components/schemas/DailyCapacityConflictDetails"
               }
             }
+          }
+        }
+      },
+      "CapacityImpactTask": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subtaskId",
+          "eventId",
+          "title",
+          "estimatedHours"
+        ],
+        "properties": {
+          "subtaskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "estimatedHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          }
+        }
+      },
+      "CapacityAffectedDay": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "plannedHours",
+          "limitHours",
+          "excessHours",
+          "tasks"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "plannedHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "limitHours": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "excessHours": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "tasks": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/CapacityImpactTask"
+            },
+            "description": "Todas las subtareas propias del día afectado, ordenadas por subtaskId ascendente. No se elige automáticamente cuál modificar."
+          }
+        }
+      },
+      "CapacityImpact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "hasOverload",
+          "affectedDayCount",
+          "affectedDays"
+        ],
+        "description": "Solo fechas con carga estrictamente superior al límite. Fechas actuales y futuras según America/Bogota; el historial se conserva y se excluye del aviso. No existen excepciones por estado de subtarea.",
+        "properties": {
+          "hasOverload": {
+            "type": "boolean"
+          },
+          "affectedDayCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "affectedDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapacityAffectedDay"
+            },
+            "description": "Lista completa de días afectados en orden ascendente, sin recorte silencioso. affectedDayCount coincide con su longitud."
           }
         }
       }

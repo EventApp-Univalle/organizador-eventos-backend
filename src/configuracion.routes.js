@@ -3,10 +3,16 @@ const supabase = require('./supabase');
 const { validateCapacityBody, DAILY_CAPACITY } = require('./validation');
 const { ensureUserProfile } = require('./users.utils');
 
+const { loadCapacityImpact, summarizeCapacityImpact } = require('./capacity.utils');
+const { getBogotaDate } = require('./tareas.utils');
+
 const router = express.Router();
 
 function capacityResponse(dailyCapacityHours) {
   const isDefault = dailyCapacityHours == null;
+  if (!isDefault && (!['number', 'string'].includes(typeof dailyCapacityHours) ||
+      !Number.isFinite(Number(dailyCapacityHours)) || Number(dailyCapacityHours) < DAILY_CAPACITY.MIN ||
+      Number(dailyCapacityHours) > DAILY_CAPACITY.MAX)) throw new Error('Capacidad inconsistente.');
   return {
     dailyLimitHours: isDefault ? DAILY_CAPACITY.DEFAULT : Number(dailyCapacityHours),
     defaultDailyLimitHours: DAILY_CAPACITY.DEFAULT,
@@ -25,15 +31,15 @@ function internalError(res, operation, error) {
 }
 
 router.get('/capacidad', async (req, res) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('daily_capacity_hours')
-    .eq('id', req.user.id)
-    .maybeSingle();
-
-  if (error) return internalError(res, 'consultar la capacidad diaria', error);
-
-  return res.status(200).json(capacityResponse(data?.daily_capacity_hours ?? null));
+  try {
+    const { data, error } = await supabase.from('users').select('id,daily_capacity_hours')
+      .eq('id', req.user.id).maybeSingle();
+    if (error) throw error;
+    if (data && data.id !== req.user.id) throw new Error('Perfil inconsistente.');
+    const response = capacityResponse(data?.daily_capacity_hours ?? null);
+    const snapshot = await loadCapacityImpact(req.user.id, getBogotaDate());
+    return res.status(200).json({ ...response, impact: summarizeCapacityImpact(snapshot, response.dailyLimitHours) });
+  } catch (error) { return internalError(res, 'consultar la capacidad y su impacto', error); }
 });
 
 router.patch('/capacidad', async (req, res) => {
@@ -49,23 +55,25 @@ router.patch('/capacidad', async (req, res) => {
     });
   }
 
-  const { error: profileError } = await ensureUserProfile(req.user);
-  if (profileError) {
-    return internalError(res, 'preparar el perfil del usuario', profileError);
-  }
-
-  const { data, error } = await supabase
-    .from('users')
-    .update({ daily_capacity_hours: validation.value.dailyLimitHours })
-    .eq('id', req.user.id)
-    .select('daily_capacity_hours')
-    .maybeSingle();
-
-  if (error) return internalError(res, 'guardar la capacidad diaria', error);
-
-  return res.status(200).json(
-    capacityResponse(data?.daily_capacity_hours ?? validation.value.dailyLimitHours)
-  );
+  try {
+    // Read the complete plan before writing. A failed/incomplete analysis does not save capacity.
+    const snapshot = await loadCapacityImpact(req.user.id, getBogotaDate());
+    const impact = summarizeCapacityImpact(snapshot, validation.value.dailyLimitHours);
+    const { error: profileError } = await ensureUserProfile(req.user);
+    if (profileError) throw profileError;
+    const { data, error } = await supabase.from('users')
+      .update({ daily_capacity_hours: validation.value.dailyLimitHours })
+      .eq('id', req.user.id).select('id,daily_capacity_hours').maybeSingle();
+    if (error) throw error;
+    if (!data || data.id !== req.user.id || data.daily_capacity_hours == null) {
+      throw new Error('No se confirmó la fila guardada.');
+    }
+    const response = capacityResponse(data.daily_capacity_hours);
+    // The returned row is authoritative, even if it differs from the requested value.
+    const confirmedImpact = response.dailyLimitHours === validation.value.dailyLimitHours ? impact
+      : summarizeCapacityImpact(snapshot, response.dailyLimitHours);
+    return res.status(200).json({ ...response, impact: confirmedImpact });
+  } catch (error) { return internalError(res, 'guardar la capacidad y calcular su impacto', error); }
 });
 
 module.exports = router;

@@ -184,3 +184,46 @@ test('POST de subtareas documenta 409 con el mismo contrato de sugerencias que P
   assert.match(post.description, /antes|Antes/);
   assert.equal(post.responses['201'].content['application/json'].schema.$ref, '#/components/schemas/Subtask');
 });
+
+test('capacidad documenta impacto aditivo, autenticación y guardar sin bloquear por sobrecarga', () => {
+  const operations = document.paths['/api/configuracion/capacidad'];
+  const schemas = document.components.schemas;
+  assert.deepEqual(schemas.CapacityConfig.required,
+    ['dailyLimitHours', 'defaultDailyLimitHours', 'isDefault', 'impact']);
+  assert.equal(schemas.CapacityConfig.properties.impact.$ref, '#/components/schemas/CapacityImpact');
+  assert.deepEqual(schemas.CapacityImpact.required, ['hasOverload', 'affectedDayCount', 'affectedDays']);
+  assert.deepEqual(schemas.CapacityAffectedDay.required, ['date', 'plannedHours', 'limitHours', 'excessHours', 'tasks']);
+  assert.deepEqual(schemas.CapacityImpactTask.required, ['subtaskId', 'eventId', 'title', 'estimatedHours']);
+  assert.equal(schemas.CapacityImpact.properties.affectedDays.items.$ref, '#/components/schemas/CapacityAffectedDay');
+  assert.equal(schemas.CapacityAffectedDay.properties.tasks.items.$ref, '#/components/schemas/CapacityImpactTask');
+  for (const [method, responses] of [['get', ['200', '401', '500']], ['patch', ['200', '400', '401', '500']]]) {
+    const op = operations[method];
+    assert.deepEqual(Object.keys(op.responses).sort(), responses);
+    assert.equal(op.responses['200'].content['application/json'].schema.$ref, '#/components/schemas/CapacityConfig');
+    assert.match(op.description, /America\/Bogota/);
+  }
+  assert.match(operations.patch.description, /sin fallback/);
+  assert.match(operations.patch.description, /sin actualizar la capacidad/);
+});
+
+test('ejemplos GET y PATCH de capacidad contienen impactos completos y coherentes', () => {
+  for (const op of Object.values(document.paths['/api/configuracion/capacidad'])) {
+    const examples = op.responses['200'].content['application/json'].examples;
+    const values = Object.values(examples).map(example => example.value);
+    assert.ok(values.some(value => !value.impact.hasOverload));
+    assert.ok(values.some(value => value.impact.affectedDayCount === 2));
+    for (const value of values) {
+      const impact = value.impact;
+      assert.equal(impact.affectedDayCount, impact.affectedDays.length);
+      assert.equal(impact.hasOverload, impact.affectedDayCount > 0);
+      assert.deepEqual(impact.affectedDays.map(day => day.date), impact.affectedDays.map(day => day.date).sort());
+      for (const day of impact.affectedDays) {
+        assert.equal(day.limitHours, value.dailyLimitHours);
+        assert.equal(day.tasks.reduce((sum, task) => sum + task.estimatedHours, 0), day.plannedHours);
+        assert.equal(day.plannedHours - day.limitHours, day.excessHours);
+        assert.ok(day.excessHours > 0);
+        assert.deepEqual(day.tasks.map(task => task.subtaskId), day.tasks.map(task => task.subtaskId).sort());
+      }
+    }
+  }
+});

@@ -21,7 +21,7 @@ function capacityResponse(dailyCapacityHours) {
 }
 
 function internalError(res, operation, error) {
-  console.error(`Error al ${operation}:`, error.message);
+  console.error(`Error al ${operation}.`);
   return res.status(500).json({
     error: {
       code: 'INTERNAL_ERROR',

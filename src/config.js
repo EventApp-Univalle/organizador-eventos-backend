@@ -11,14 +11,11 @@ for (const variable of requiredVariables) {
   }
 }
 
+const { runtimeSettings } = require('./environment.utils');
 const config = {
-  port: Number(process.env.PORT) || 3000,
+  ...runtimeSettings(process.env),
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
-  corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
 };
 
 module.exports = config;

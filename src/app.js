@@ -9,6 +9,7 @@ const configuracionRouter = require('./configuracion.routes');
 const openapiDocument = require('../docs/openapi.json');
 
 const app = express();
+app.disable('x-powered-by');
 
 app.use(
   cors({
@@ -52,7 +53,7 @@ app.use((error, req, res, next) => {
     return next(error);
   }
 
-  console.error('Error interno no controlado:', error.message);
+  console.error('Error interno no controlado.');
 
   return res.status(500).json({
     error: {

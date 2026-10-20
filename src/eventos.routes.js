@@ -64,7 +64,7 @@ function eventNotFoundResponse(res) {
 }
 
 function internalErrorResponse(res, operation, error) {
-  console.error(`Error al ${operation}:`, error.message);
+  console.error(`Error al ${operation}.`);
 
   return res.status(500).json({
     error: {
@@ -186,7 +186,7 @@ router.post('/', async (req, res) => {
     .single();
 
   if (error) {
-    console.error('Error al crear evento:', error.message);
+    console.error('Error al crear evento.');
 
     return res.status(500).json({
       error: {
@@ -364,7 +364,7 @@ router.get('/:id', async (req, res) => {
     .maybeSingle();
 
   if (error) {
-    console.error('Error al consultar evento:', error.message);
+    console.error('Error al consultar evento.');
 
     return res.status(500).json({
       error: {
